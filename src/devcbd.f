@@ -1,0 +1,16 @@
+      BLOCK DATA DEVCBD
+
+!     DEVCBD DEFINES FILE UNIT NUMBERS.
+      INCLUDE 'IFIL.h'
+
+!     UNIT NUMBERS 1 THROUGH 35 ARE EXPLICITLY EXCLUDED IN THE
+!     nunit.f ROUTINE.  IF ADDITIONAL UNIT NUMBERS ARE ASSIGNED HERE,
+!     PLEASE MAKE THE CORRESPONDING CHANGE TO THE nunit.f ROUTINE.
+      DATA IRD/ 1/,    IPR/ 2/,  IROOT/ 3/,                             &
+     &                 IPU/ 7/,   IPR1/ 8/,  ITBCN/ 9/,  ITBTL/10/,     &
+     &    ITBX/11/, ISCRCH/12/,  IPLOT/13/, ICHNUN/14/, IPUSCN/15/,     &
+     &  IPTSCN/16/,  IFLUX/17/,    ICR/18/,  IDBIN/19/, IDBOUT/20/,     &
+     &  I3DGEN/21/, I3DCNT/22/, I3DDAT/23/, I3DMOL/24/,   IALB/25/,     &
+     &     JPU/26/,   JPR1/27/,  JPLOT/28/, JPUSCR/29/, ITKDIS/30/,     &
+     &  IRKDIS/31/, JTKDIS/32/, JRKDIS/33/,  LPATH/34/,   ISAP/35/
+      END

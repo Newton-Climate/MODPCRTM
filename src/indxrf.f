@@ -1,0 +1,102 @@
+      SUBROUTINE INDXRF(WAVL,TC,KEY,RINDEX,IINDEX)
+
+!     INDXRF RETURNS THE COMPLEX INDEX OF REFRACTIVE.  CHECKS ARE
+!     MADE & WARNINGS GIVEN.  RAY, APPLIED OPTICS VOL 11, 1836-1844
+!     (1972).  CORRECTIONS HAVE BEEN MADE TO RAY'S ORIGINAL PAPER.
+      IMPLICIT NONE
+
+!     COMMONS:
+      INCLUDE 'IFIL.h'
+
+!     INPUT ARGUMENTS:
+!       WAVL     SPECTRAL WAVELENGTH [CM].
+!       TC       TEMPERATURE [CELSIUS].
+!       KEY      FLAG, 1 FOR AEROSOLS AND 2 FOR CIRRUS.
+      REAL WAVL,TC
+      INTEGER KEY
+
+!     OUTPUT ARGUMENTS:
+!       RINDEX   REAL PART OF THE REFRACTIVE INDEX.
+!       IINDEX   IMAGINARY PART OF THE REFRACTIVE INDEX (NEGATIVE).
+      REAL RINDEX,IINDEX
+
+!     DECLARE BLOCK DATA ROUTINES EXTERNAL:
+      EXTERNAL DEVCBD
+
+!     LOCAL VARIABLES:
+      REAL RTERM,WA,AA,CEN,BB,CC
+
+!     FUNCTIONS:
+!       DCI     DESCRIBES THE IMAGINARY PART OF THE DIELECTRIC CONSTANT.
+      REAL DOP,DCI
+      DCI(WA,AA,CEN,BB,CC)=-AA*EXP(-ABS(((4+LOG10(WA/CEN))/BB))**CC)
+
+      IF(WAVL.LT..0001)WRITE(IPR,'(//2A,/)')' Warning from INDXRF: ',   &
+     &  ' Attempting to evaluate for a wavelength below 1 micron.'
+      IF(TC.LT.-20.)WRITE(IPR,'(//2A,/)')' Warning from INDXRF: ',      &
+     &  ' Attempting to evaluate for a temperature below -20 deg C.'
+      CALL DEBYE(WAVL,TC,KEY,RINDEX,IINDEX)
+
+!     TABLE 3 WATER PG. 1840
+      IF(WAVL.GT..034)THEN
+          IF(WAVL.LE..1)THEN
+              RTERM=DOP(WAVL,1.83899,1639.,52340.4,10399.2,588.24,      &
+     &          345005.,259913.,161.29,43319.7,27661.2)
+              RTERM=RTERM+RTERM*(TC-25.)*.0001*EXP((.000025*WAVL)**.25)
+              RINDEX=RINDEX*(WAVL-.034)/.066+RTERM*(.1-WAVL)/.066
+          ENDIF
+      ELSEIF(WAVL.GT..0006)THEN
+          RINDEX=DOP(WAVL,1.83899,1639.,52340.4,10399.2,588.24,345005., &
+     &      259913.,161.29,43319.7,27661.2)
+          RINDEX=RINDEX+RINDEX*(TC-25.)*.0001*EXP((.000025*WAVL)**.25)
+          IF(WAVL.LE..0007)THEN
+              RTERM=DOP(WAVL,1.79907,3352.27,99.914E+04,15.1963E+04,    &
+     &          1639.,50483.5,9246.27,588.24,84.4697E+04,10.7615E+05)
+              RTERM=RTERM+RTERM*(TC-25.)*.0001*EXP((.000025*WAVL)**.25)
+              RINDEX=RTERM*(.0007-WAVL)/.0001+RINDEX*(WAVL-.0006)/.0001
+          ENDIF
+      ELSE
+          RINDEX=DOP(WAVL,1.79907,3352.27,99.914E+04,15.1963E+04,1639., &
+     &      50483.5,9246.27,588.24,84.4697E+04,10.7615E+05)
+          RINDEX=RINDEX+RINDEX*(TC-25.)*.0001*EXP((.000025*WAVL)**.25)
+      ENDIF
+
+!     TABLE 2 WATER PG. 1840
+      IF(WAVL.LT..3)THEN
+          IF(WAVL.GE..03)THEN
+              IINDEX=IINDEX+DCI(WAVL,.25,300.,.47,3.)                   &
+     &          +DCI(WAVL,.39,17.,.45,1.3)+DCI(WAVL,.41,62.,.35,1.7)
+          ELSEIF(WAVL.GE..0062)THEN
+              IINDEX=IINDEX+DCI(WAVL,.41,62.,.35,1.7)                   &
+     &          +DCI(WAVL,.39,17.,.45,1.3)+DCI(WAVL,.25,300.,.4,2.)
+          ELSEIF(WAVL.GE..0017)THEN
+              IINDEX=IINDEX+DCI(WAVL,.39,17.,.45,1.3)                   &
+     &          +DCI(WAVL,.41,62.,.22,1.8)+DCI(WAVL,.25,300.,.4,2.)
+          ELSEIF(WAVL.GE..00061)THEN
+              IINDEX=IINDEX+DCI(WAVL,.12,6.1,.042,.6)                   &
+     &          +DCI(WAVL,.39,17.,.165,2.4)+DCI(WAVL,.41,62.,.22,1.8)
+          ELSEIF(WAVL.GE..000495)THEN
+              IINDEX=IINDEX+DCI(WAVL,.01,4.95,.05,1.)                   &
+     &          +DCI(WAVL,.12,6.1,.009,2.)
+          ELSEIF(WAVL.GE..000297)THEN
+              IINDEX=IINDEX+DCI(WAVL,.27,2.97,.04,2.)                   &
+     &          +DCI(WAVL,.01,4.95,.06,1.)
+          ELSE
+              IINDEX=IINDEX+DCI(WAVL,.27,2.97,.025,2.)                  &
+     &          +DCI(WAVL,.01,4.95,.06,1.)
+          ENDIF
+      ENDIF
+      RETURN
+      END
+
+      FUNCTION DOP(WAVL,A,CEN1,B,C,CEN2,D,E,CEN3,F,G)
+
+!     DESCRIBES THE REAL PART OF THE DIELECTRIC CONSTANT
+      V=1./WAVL
+      V2=V*V
+      H1=CEN1**2-V2
+      H2=CEN2**2-V2
+      H3=CEN3**2-V2
+      DOP=SQRT(A+B*H1/(H1*H1+C*V2)+D*H2/(H2*H2+E*V2)+F*H3/(H3*H3+G*V2))
+      RETURN
+      END

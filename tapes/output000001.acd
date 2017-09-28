@@ -1,0 +1,5 @@
+
+ SPECTRAL LOS  k           k         SUN->GND   SUN-GND-OBS      OBS->GND       OBS-GND     SPHERICAL
+FREQUENCY  #  INT       WEIGHT        DIFFUSE        DIRECT      EMBEDDED        DIRECT        ALBEDO
+   [CM-1]                              TRANSM        TRANSM    DIF TRANSM        TRANSM      FROM GND
+--------- --- ---     --------    -----------   -----------   -----------   -----------   -----------

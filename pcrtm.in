@@ -1,0 +1,11 @@
+$
+ &InOutPar
+
+    GridFileLand   = './support/OSSEIndex_109.asc'
+    GridFileOcean   = './support/OSSEIndex_109.asc'
+    ParFileLand    = './support/ParamUpOSSE.asc'
+    ParFileOcean    = './support/ParamUpOSSE.asc'
+
+
+
+ /

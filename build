@@ -1,0 +1,11 @@
+#!/bin/bash
+
+make clean
+make
+./makelib5.sh
+cd modpcrtm_lib
+cp *.a ../test
+cd ../test
+mpif90 -O0 -o multicall multicall.f90 -L$(pwd) -lmodpcrtm
+cp multicall ../
+cd ../

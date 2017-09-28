@@ -1,0 +1,40 @@
+To submit a job:
+
+   "qsub gnu_test_exe_list_ha.csh"
+
+which will produce
+
+   gnu_test_exe_list_ha.csh.e??????.1  (where ?????? represents the qsub job number)
+   gnu_test_exe_list_ha.csh.o??????.1
+
+In this case, we are processing 135 FOVs in one PCRTM run.
+
+Then run post-processor in the Matlab environment:
+
+   "radtorefl" 
+
+
+Updates made in src directory:
+
+   Adapted to handle land or ocean FOVs, process multiple FOVs per run.  
+   Write radiance output files from driver and include solar zenith angle.
+
+   Files changed:
+   dgrd.f
+   driver.f
+   fnames.f
+   rflect.f
+   trans.f
+   pcrtm.in
+
+Scripts added:
+ 
+   gnu_test_exe_list_ha.csh
+   myscript_list_testexe.csh
+
+Input file added:
+
+   list_tape5_?.asc - Provides a list of tape5 input filenames to allow the 
+                      modPCRTM to run multiple FOVs per run. Also has an index
+		      showing how many FOVs are processed in this run.
+

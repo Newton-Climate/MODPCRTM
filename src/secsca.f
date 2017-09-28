@@ -1,0 +1,72 @@
+      REAL FUNCTION  SECSCA(CS, FLYR, LAYRU, MAXCOE, NCOEF, NSTR,       &
+     &                       PMOM, SSALB, TAUC, UMU, UMU0, UTAU)
+
+!                          SECONDARY SCATTERED INTENSITY OF EQ. STW (71)
+
+!                I N P U T   V A R I A B L E S
+
+!        CS      COSINE OF SCATTERING ANGLE
+!        FLYR    TRUNCATED FRACTION IN DELTA-M METHOD
+!        LAYRU   INDEX OF UTAU IN MULTI-LAYERED SYSTEM
+!        MAXCOE  MAXIMUM NUMBER OF PHASE FUNCTION MOMENT COEFFICIENTS
+!        NCOEF   NUMBER OF PHASE FUNCTION LEGENDRE COEFFICIENTS SUPPLIED
+!        NSTR    NUMBER OF POLAR QUADRATURE ANGLES
+!        PMOM    PHASE FUNCTION LEGENDRE COEFFICIENTS (K, LC)
+!                K=0 TO NCOEF, LC=1 TO NLYR, WITH PMOM(0,LC)=1
+!        SSALB   SINGLE SCATTERING ALBEDO OF COMPUTATIONAL LAYERS
+!        TAUC    CUMULATIVE OPTICAL DEPTH AT COMPUTATIONAL LAYERS
+!        UMU     COSINE OF EMERGENT ANGLE
+!        UMU0    COSINE OF INCIDENT ZENITH ANGLE
+!        UTAU    USER DEFINED OPTICAL DEPTH FOR OUTPUT INTENSITY
+
+      REAL       FLYR(*), PMOM(0:MAXCOE,*), SSALB(*), TAUC(0:*)
+
+!              WEIGHTING OPTICAL PROPERTIES OF SINGLE SCATTERING ALBEDO,
+!          TRUNCATED FRACTION AND INCIDENT ZENITH ANGLE OF EQ. STW (71B)
+
+      TBAR=UTAU - TAUC(LAYRU-1)
+      WBAR=SSALB(LAYRU) * TBAR
+      FBAR=FLYR(LAYRU) * WBAR
+      DO 10  LYR=1, LAYRU-1
+         DTAU=TAUC(LYR) - TAUC(LYR-1)
+         TBAR=TBAR + DTAU
+         WBAR=WBAR + SSALB(LYR) * DTAU
+         FBAR=FBAR + SSALB(LYR) * DTAU * FLYR(LYR)
+10    CONTINUE
+
+      FBAR=FBAR / WBAR
+      WBAR=WBAR / TBAR
+      UMU0P= UMU0 / (1.-FBAR*WBAR)
+!                                               WEIGHTING PHASE FUNCTION
+      PSPIKE=1.
+      PHAT=1.
+      PL1=1.
+      PL2=0.
+!                                        LEGENDRE POLY. RECURRENCE: L<2N
+      DO 20  K=1, NSTR-1
+         PL =((2*K-1) * CS * PL1 - (K-1) * PL2) / K
+         PL2=PL1
+         PL1=PL
+         PSPIKE=PSPIKE + (2.*PHAT - PHAT**2) * (2*K+1) * PL
+20    CONTINUE
+!                                      LEGENDRE POLY. RECURRENCE: L>2N-1
+      DO 40  K=NSTR, NCOEF
+         PL =((2*K-1) * CS * PL1 - (K-1) * PL2) / K
+         PL2=PL1
+         PL1=PL
+         DTAU=UTAU - TAUC(LAYRU-1)
+         PHAT=PMOM(K,LAYRU) * SSALB(LAYRU) * DTAU
+         DO 30  LYR=1, LAYRU-1
+            DTAU=TAUC(LYR) - TAUC(LYR-1)
+            PHAT=PHAT + PMOM(K,LYR) * SSALB(LYR) * DTAU
+30       CONTINUE
+         PHAT=PHAT / (FBAR*WBAR*TBAR)
+         PSPIKE=PSPIKE + (2.*PHAT - PHAT**2) * (2*K+1) * PL
+40    CONTINUE
+!                                                  UHAT OF EQ. STW (71A)
+
+      SECSCA=(FBAR*WBAR)**2 / (1.-FBAR*WBAR) * PSPIKE *                 &
+     &           XIFUNC(-UMU, UMU0P, UMU0P, UTAU)
+
+      RETURN
+      END

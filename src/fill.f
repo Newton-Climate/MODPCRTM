@@ -1,0 +1,425 @@
+      SUBROUTINE FILL(HA,HB,JNEXT)
+
+!     FILL DEFINES THE ATMOSPHERIC BOUNDARIES OF THE PATH FROM HA
+!     TO HB AND INTERPOLATES (EXTRAPOLATES) THE DENSITIES TO THESE
+!     BOUNDARIES ASSUMING THE DENSITIES VARY EXPONENTIALLY WITH HEIGHT.
+      IMPLICIT NONE
+
+!     PARAMETERS:
+!       ALTTOL   ALTITUDE TOLERANCE OF 0.1 MILLIMETERS [KM].
+      INCLUDE 'PARAMS.h'
+      INCLUDE 'YPROP.h'
+      DOUBLE PRECISION ALTTOL
+!old  PARAMETER(ALTTOL=2.D-6)
+      PARAMETER(ALTTOL=1.D-7)
+
+!     INPUT ARGUMENTS:
+!       HA       LOWER ALTITUDE [KM].
+!       HB       UPPER ALTITUDE [KM].
+!       JNEXT    PATH ALTITUDE ARRAY INDEX.
+
+!     OUTPUT ARGUMENTS:
+!       JNEXT    PATH ALTITUDE ARRAY INDEX.
+      DOUBLE PRECISION HA,HB
+      INTEGER JNEXT
+
+!     COMMONS:
+      INCLUDE 'IFIL.h'
+      INCLUDE 'BASE.h'
+
+!     /MPROF/
+!       ZM       PROFILE LEVEL ALTITUDES [KM].
+!       PM       PROFILE LEVEL PRESSURES [MBAR].
+!       TM       PROFILE LEVEL TEMPERATURES [K].
+!       RFNDX    PROFILE LEVEL REFRACTIVITIES.
+!       LRHSET   FLAG, .TRUE. IF RELATIVE HUMIDITY IS NOT TO BE SCALED.
+      DOUBLE PRECISION ZM
+      REAL PM,TM,RFNDX
+      LOGICAL LRHSET
+      COMMON/MPROF/ZM(LAYDIM),PM(LAYDIM),TM(LAYDIM),                    &
+     &  RFNDX(LAYDIM),LRHSET(LAYDIM)
+
+!     /DEN/
+!       DENSTY   PROFILE LEVEL DENSITIES [ATM CM / KM FOR MOST SPECIES].
+      REAL DENSTY
+      COMMON/DEN/DENSTY(0:MEXTXY,1:LAYDIM)
+
+!     /CNTRL/
+!       NSEG     NUMBER OF PATH SEGMENTS ALONG LINE-OF-SIGHT.
+!       ML       NUMBER OF ATMOSPHERIC PROFILE LEVELS.
+!       MLFLX    NUMBER OF LEVELS FOR WHICH FLUX VALUES ARE WRITTEN.
+!       IMULT    MULTIPLE SCATTERING FLAG
+!                  (0=NONE, 1=AT SENSOR, -1=AT FINAL OR TANGENT POINT).
+!       THERML   FLAG TO CALCULATE THERMAL SCATTER.
+      INTEGER NSEG,ML,MLFLX,IMULT
+      LOGICAL THERML
+      COMMON/CNTRL/NSEG(0:MLOSP1),ML,MLFLX,IMULT,THERML
+
+!     /FILLP/
+!       ZP       ALTITUDE AT REFRACTED PATH LEVELS [KM].
+!       RANGEP   SEGMENT RANGE [KM].
+!       PP       PRESSURE AT REFRACTED PATH LEVELS [MBAR].
+!       TP       TEMPERATURE AT REFRACTED PATH LEVELS [K].
+!       RHP      RELATIVE HUMIDITY AT REFRACTED PATH LEVELS [%].
+!       RFNDXP   REFRACTIVITIES AT REFRACTED PATH LEVELS.
+!       DENPTH   ATMOSPHERIC LEVEL DENSITIES
+!                [UNITS VARY WITH SPECIES BUT MOST OFTEN ATM CM / KM].
+      DOUBLE PRECISION ZP,RANGEP,PP,RFNDXP,DENPTH
+      REAL TP,RHP
+      COMMON/FILLP/ZP(LAYDM1),RANGEP(LAYDM1),PP(LAYDM1),                &
+     &  TP(LAYDM1),RHP(LAYDM1),RFNDXP(LAYDM1),DENPTH(0:MEXTXY,1:LAYDM1)
+
+      LOGICAL LSMALL
+      COMMON/SMALL2/LSMALL
+
+!     /CARD2/
+!       IHAZE    BOUNDARY LAYER AEROSOL MODEL NUMBER.
+!       ISEASN   SEASON NUMBER (1=SPRING-SUMMER, 2=FALL-WINTER).
+!       IVULCN   VOLCANIC AEROSOL MODEL NUMBER.
+!       ICSTL    COASTAL AIRMASS MODEL NUMBER.
+!       ICLD     CLOUD MODEL NUMBER.
+!       IVSA     VERTICAL STRUCTURE ALGORITHM (0=OFF, 1=ON).
+!       VIS      SURFACE VISIBILITY (GROUND METEOROLOGICAL RANGE) [KM].
+!       WSS      CURRENT WIND SPEED (M/S).
+!       WHH      24-HOUR WIND SPEED (M/S).
+!       RAINRT   RAIN RATE (MM/HR)
+!       LSAP     LOGICAL FLAG FOR SPECTRAL AEROSOL PROFILES INPUT.
+      INTEGER IHAZE,ISEASN,IVULCN,ICSTL,ICLD,IVSA
+      REAL VIS,WSS,WHH,RAINRT
+      LOGICAL LSAP
+      COMMON/CARD2/IHAZE,ISEASN,IVULCN,ICSTL,ICLD,IVSA,                 &
+     &  VIS,WSS,WHH,RAINRT,LSAP
+
+!     /SAP/
+!       NWVSAP   NUMBER OF AEROSOL SPECTRAL GRID POINTS.
+!       NLGSAP   HIGHEST AEROSOL PHASE FUNCTION LEGENDRE MOMENT.
+!       NANSAP   NUMBER OF AEROSOL PHASE FUNCTION ANGULAR POINTS.
+!       LEVSAP   NUMBER OF AEROSOL ATMOSPHERIC LEVELS.
+!       ANGSAP   AEROSOL PHASE FUNCTION ANGULAR GRID [DEGREES].
+!       COSSAP   COSINE OF THE AEROSOL PHASE FUNCTION ANGLES.
+!       WAVSAP   AEROSOL SPECTRAL GRID [MICRONS].
+!       LEGSAP   AEROSOL LEGENDRE COEFFICIENTS.
+!       PFSAP    AEROSOL PHASE FUNCTION [SR-1].
+!       LOSSAP   LOGICAL FLAG, TRUE FOR LINE-OF-SIGHT PATH.
+      INTEGER NWVSAP,NLGSAP,NANSAP,LEVSAP
+      DOUBLE PRECISION ANGSAP,COSSAP,PFSAP
+      REAL WAVSAP,LEGSAP
+      LOGICAL LOSSAP
+      COMMON/SAP/NWVSAP,NLGSAP,NANSAP,LEVSAP,ANGSAP(MANSAP),            &
+     &  COSSAP(MANSAP),WAVSAP(MWVSAP),LEGSAP(MLGSAP,MWVSAP,LAYDIM),     &
+     &  PFSAP(MANSAP,MWVSAP,LAYDIM),LOSSAP
+
+!     /SAPDAT/
+!       BSAPX    AEROSOL EXTINCTION COEFFICIENTS [KM-1].
+!       BSAPA    AEROSOL ABSORPTION COEFFICIENTS [KM-1].
+      REAL BSAPX,BSAPA
+      COMMON/SAPDAT/BSAPX(MWVSAP,LAYDIM),BSAPA(MWVSAP,LAYDIM)
+
+!     /SAPPTH/
+!       BPSAPX   AEROSOL EXTINCTION COEFFICIENTS [KM-1].
+!       BPSAPA   AEROSOL ABSORPTION COEFFICIENTS [KM-1].
+      DOUBLE PRECISION BPSAPX,BPSAPA
+      COMMON/SAPPTH/BPSAPX(MWVSAP,LAYDM1),BPSAPA(MWVSAP,LAYDM1)
+
+!     /SAPPF/
+!       ASMSAP   SPECTRAL AEROSOL PROFILE ASYMMETRY FACTOR.
+!       PFPSAP   SPECTRAL AEROSOL PROFILE PHASE FUNCTION [SR-1].
+      REAL ASMSAP,PFPSAP
+      COMMON/SAPPF/ASMSAP(MWVSAP,LAYDM1),PFPSAP(MANSAP,MWVSAP,LAYDM1)
+
+!     /MOL_FM/
+!       UMX_FM   ATM LEVEL MOLE FRACTION RATIO, RELATIVE TO CO2.
+!       AUX_FM   ATM LEVEL AUX MOLECULAR GASES RELATIVE MOLE FRACTION.
+      REAL UMX_FM,AUX_FM
+      COMMON/MOL_FM/UMX_FM(3:NMOLXT,1:LAYDIM),AUX_FM(MMOLY,LAYDIM)
+
+!     /MOL_FP/
+!       UMX_FP   PATH LEVEL MOLE FRACTION RATIO, RELATIVE TO CO2.
+!       AUX_FP   PATH LEVEL AUX MOLECULAR GASES RELATIVE MOLE FRACTION.
+      REAL UMX_FP,AUX_FP
+      COMMON/MOL_FP/UMX_FP(3:NMOLXT,1:LAYDM1),AUX_FP(MMOLY,LAYDM1)
+
+!     /CJM5/
+!       AMOD3D   FLAG INDICATING OUTPUT DATABASE FILE TYPE:
+      CHARACTER AMOD3D*1
+      COMMON/CJM5/AMOD3D
+
+!     LOCAL VARIABLES:
+!       IALT     ALTITUDE LOOP INDEX.
+!       KSPEC    SPECIES LOOP INDEX
+!       IA       INDEX OF LOWEST ALTITUDE Z ABOVE HA.
+!       IB       INDEX OF LOWEST ALTITUDE Z ABOVE OR EQUAL TO HB.
+!       ILO      LOWER ALTITUDE INTERPOLATION INDEX.
+!       IHI      HIGHER ALTITUDE INTERPOLATION INDEX.
+!       ANTERP   ALTITUDE INTERPOLATION FRACTION.
+!       ZNTERP   ALTITUDE INTERPOLATION FRACTION.
+!       IWVSAP   SPECTRAL GRID INDEX FOR SPECTRAL AEROSOL PROFILES.
+!       IANSAP   ANGULAR GRID INDEX FOR SPECTRAL AEROSOL PROFILES.
+!       IMOL     MOLECULAR INDEX.
+      INTEGER IALT,KSPEC,IA,IB,ILO,IHI,IWVSAP,IANSAP,IMOL
+      REAL ANTERP
+      DOUBLE PRECISION ZNTERP
+
+!     FUNCTIONS:
+!       EXPINT   SINGLE PRECISION EXPONENTIAL INTERPOLATION.
+!       DPEXNT   DOUBLE PRECISION EXPONENTIAL INTERPOLATION.
+      REAL EXPINT
+      DOUBLE PRECISION DPEXNT
+
+!     DECLARE BLOCK DATA ROUTINES EXTERNAL:
+      EXTERNAL DEVCBD
+
+      IF(HA.GT.HB .OR. (HA.EQ.HB .AND. .NOT.LSMALL))THEN
+          WRITE(IPR,'(/A,//10X,A,2E25.15,I6)')' SUBROUTINE FILL'//      &
+     &      ' ERROR: HA .GE. HB','HA, HB, JNEXT = ',HA,HB,JNEXT
+          IF(LJMASS)CALL WRTBUF(FATAL)
+          STOP 'Error in FILL:  HA .GE. HB'
+      ENDIF
+
+!     FIND ZM(IA):  THE SMALLEST Z.GT.HA
+      DO IA=1,ML
+          IF(HA+ALTTOL.LT.ZM(IA))THEN
+
+!             FIND ZM(IB):  THE SMALLEST Z.GE.HB
+              DO IB=IA,ML
+                  IF(HB.LE.ZM(IB)+ALTTOL)GOTO 10
+              ENDDO
+              GOTO 10
+          ENDIF
+      ENDDO
+      IB=IA
+   10 CONTINUE
+
+!     INTERPOLATE DENSITIES TO HA,HB:
+      ZP(JNEXT)=HA
+      IHI=MIN(ML,MAX(IA,2))
+      ILO=IHI-1
+      ZNTERP=(HA-ZM(ILO))/(ZM(IHI)-ZM(ILO))
+      ANTERP=SNGL(ZNTERP)
+      PP(JNEXT)=DPEXNT(DBLE(PM(ILO)),DBLE(PM(IHI)),ZNTERP)
+      TP(JNEXT)=TM(ILO)+ANTERP*(TM(IHI)-TM(ILO))
+      RHP(JNEXT)=RELHUM(ILO)+ANTERP*(RELHUM(IHI)-RELHUM(ILO))
+      RFNDXP(JNEXT)=DPEXNT(DBLE(RFNDX(ILO)),DBLE(RFNDX(IHI)),ZNTERP)
+      DO KSPEC=0,MEXTX+NMOLY
+          IF(KSPEC.EQ.66 .OR. KSPEC.EQ.67 .OR. KSPEC.EQ.16)THEN
+
+!             LINEARLY INTERPOLATE CLOUD DENSITIES:
+              DENPTH(KSPEC,JNEXT)=DBLE(DENSTY(KSPEC,ILO))+ZNTERP        &
+     &          *(DBLE(DENSTY(KSPEC,IHI))-DBLE(DENSTY(KSPEC,ILO)))
+          ELSE
+
+!             EXPONENTIALLY INTERPOLATE:
+              DENPTH(KSPEC,JNEXT)=DPEXNT(DBLE(DENSTY(KSPEC,ILO)),       &
+     &                                 DBLE(DENSTY(KSPEC,IHI)),ZNTERP)
+          ENDIF
+      ENDDO
+      IF(LSAP)THEN
+
+!         CHECK FOR SOLAR OR GROUND-TO-SPACE VERTICAL PATH:
+          IF(.NOT.LOSSAP)THEN
+              IF(IHI.LE.LEVSAP)THEN
+                  DO IWVSAP=1,NWVSAP
+                      BPSAPX(IWVSAP,JNEXT)                              &
+     &                  =DPEXNT(DBLE(BSAPX(IWVSAP,ILO)),                &
+     &                          DBLE(BSAPX(IWVSAP,IHI)),ZNTERP)
+                      BPSAPA(IWVSAP,JNEXT)                              &
+     &                  =DPEXNT(DBLE(BSAPA(IWVSAP,ILO)),                &
+     &                          DBLE(BSAPA(IWVSAP,IHI)),ZNTERP)
+                  ENDDO
+              ELSE
+                  DO IWVSAP=1,NWVSAP
+                      BPSAPX(IWVSAP,JNEXT)=0.D0
+                      BPSAPA(IWVSAP,JNEXT)=0.D0
+                  ENDDO
+              ENDIF
+
+!         LINE-OF-SIGHT PATH:
+          ELSEIF(IHI.LE.LEVSAP)THEN
+              DO IWVSAP=1,NWVSAP
+                  BPSAPX(IWVSAP,JNEXT)=DPEXNT(DBLE(BSAPX(IWVSAP,ILO)),  &
+     &              DBLE(BSAPX(IWVSAP,IHI)),ZNTERP)
+                  BPSAPA(IWVSAP,JNEXT)=DPEXNT(DBLE(BSAPA(IWVSAP,ILO)),  &
+     &              DBLE(BSAPA(IWVSAP,IHI)),ZNTERP)
+                  ASMSAP(IWVSAP,JNEXT)=LEGSAP(1,IWVSAP,ILO)             &
+     &              +ANTERP*(LEGSAP(1,IWVSAP,IHI)-LEGSAP(1,IWVSAP,ILO))
+                  DO IANSAP=1,NANSAP
+                      PFPSAP(IANSAP,IWVSAP,JNEXT)                       &
+     &                  =SNGL(PFSAP(IANSAP,IWVSAP,ILO)                  &
+     &                  +ZNTERP*(PFSAP(IANSAP,IWVSAP,IHI)               &
+     &                          -PFSAP(IANSAP,IWVSAP,ILO)))
+                  ENDDO
+              ENDDO
+          ELSE
+              DO IWVSAP=1,NWVSAP
+                  BPSAPX(IWVSAP,JNEXT)=0.D0
+                  BPSAPA(IWVSAP,JNEXT)=0.D0
+                  ASMSAP(IWVSAP,JNEXT)=0.
+                  DO IANSAP=1,NANSAP
+                      PFPSAP(IANSAP,IWVSAP,JNEXT)=0.
+                  ENDDO
+              ENDDO
+          ENDIF
+      ENDIF
+
+!     MCSCENE INTERPOLATIONS (CHECK FOR 'C'; RESET TO 'M' IN CARD5):
+      IF(AMOD3D.EQ.'C')THEN
+          DO IMOL=3,NMOLXT
+              UMX_FP(IMOL,JNEXT)                                        &
+     &          =EXPINT(UMX_FM(IMOL,ILO),UMX_FM(IMOL,IHI),ANTERP)
+          ENDDO
+          DO IMOL=1,NMOLY
+              AUX_FP(IMOL,JNEXT)                                        &
+     &          =EXPINT(AUX_FM(IMOL,ILO),AUX_FM(IMOL,IHI),ANTERP)
+          ENDDO
+      ENDIF
+
+!     FILL IN DENSITIES BETWEEN HA AND HB:
+      IF(IA.NE.IB)THEN
+          DO IALT=IA,IB-1
+              JNEXT=JNEXT+1
+              ZP(JNEXT)=ZM(IALT)
+              PP(JNEXT)=DBLE(PM(IALT))
+              TP(JNEXT)=TM(IALT)
+              RHP(JNEXT)=RELHUM(IALT)
+              RFNDXP(JNEXT)=DBLE(RFNDX(IALT))
+              DO KSPEC=0,MEXTX+NMOLY
+                  DENPTH(KSPEC,JNEXT)=DBLE(DENSTY(KSPEC,IALT))
+              ENDDO
+              IF(LSAP)THEN
+
+!                 CHECK FOR SOLAR OR GROUND-TO-SPACE VERTICAL PATH:
+                  IF(.NOT.LOSSAP)THEN
+                      IF(IALT.LE.LEVSAP)THEN
+                          DO IWVSAP=1,NWVSAP
+                              BPSAPX(IWVSAP,JNEXT)                      &
+     &                          =DBLE(BSAPX(IWVSAP,IALT))
+                              BPSAPA(IWVSAP,JNEXT)                      &
+     &                          =DBLE(BSAPA(IWVSAP,IALT))
+                          ENDDO
+                      ELSE
+                          DO IWVSAP=1,NWVSAP
+                              BPSAPX(IWVSAP,JNEXT)=0.D0
+                              BPSAPA(IWVSAP,JNEXT)=0.D0
+                          ENDDO
+                      ENDIF
+
+!                 LINE-OF-SIGHT PATH:
+                  ELSEIF(IALT.LE.LEVSAP)THEN
+                      DO IWVSAP=1,NWVSAP
+                          BPSAPX(IWVSAP,JNEXT)=DBLE(BSAPX(IWVSAP,IALT))
+                          BPSAPA(IWVSAP,JNEXT)=DBLE(BSAPA(IWVSAP,IALT))
+                          ASMSAP(IWVSAP,JNEXT)=LEGSAP(1,IWVSAP,IALT)
+                          DO IANSAP=1,NANSAP
+                              PFPSAP(IANSAP,IWVSAP,JNEXT)               &
+     &                          =SNGL(PFSAP(IANSAP,IWVSAP,IALT))
+                          ENDDO
+                      ENDDO
+                  ELSE
+                      DO IWVSAP=1,NWVSAP
+                          BPSAPX(IWVSAP,JNEXT)=0.D0
+                          BPSAPA(IWVSAP,JNEXT)=0.D0
+                          ASMSAP(IWVSAP,JNEXT)=0.
+                          DO IANSAP=1,NANSAP
+                              PFPSAP(IANSAP,IWVSAP,JNEXT)=0.
+                          ENDDO
+                      ENDDO
+                  ENDIF
+              ENDIF
+
+!             MCSCENE INTERPS (CHECK FOR 'C'; RESET TO 'M' IN CARD5):
+              IF(AMOD3D.EQ.'C')THEN
+                  DO IMOL=3,NMOLXT
+                      UMX_FP(IMOL,JNEXT)=UMX_FM(IMOL,IALT)
+                  ENDDO
+                  DO IMOL=1,NMOLY
+                      AUX_FP(IMOL,JNEXT)=AUX_FM(IMOL,IALT)
+                  ENDDO
+              ENDIF
+          ENDDO
+      ENDIF
+
+!     INTERPOLATE THE DENSITIES TO HB:
+      JNEXT=JNEXT+1
+      ZP(JNEXT)=HB
+      IHI=MIN(ML,MAX(IB,2))
+      ILO=IHI-1
+      ZNTERP=(HB-ZM(ILO))/(ZM(IHI)-ZM(ILO))
+      ANTERP=SNGL(ZNTERP)
+      PP(JNEXT)=DPEXNT(DBLE(PM(ILO)),DBLE(PM(IHI)),ZNTERP)
+      TP(JNEXT)=TM(ILO)+ANTERP*(TM(IHI)-TM(ILO))
+      RHP(JNEXT)=RELHUM(ILO)+ANTERP*(RELHUM(IHI)-RELHUM(ILO))
+      RFNDXP(JNEXT)=DPEXNT(DBLE(RFNDX(ILO)),DBLE(RFNDX(IHI)),ZNTERP)
+      DO KSPEC=0,MEXTX+NMOLY
+          IF(KSPEC.EQ.66 .OR. KSPEC.EQ.67 .OR. KSPEC.EQ.16)THEN
+
+!             LINEARLY INTERPOLATE CLOUD DENSITIES:
+              DENPTH(KSPEC,JNEXT)=DBLE(DENSTY(KSPEC,ILO))+ZNTERP        &
+     &          *(DBLE(DENSTY(KSPEC,IHI))-DBLE(DENSTY(KSPEC,ILO)))
+          ELSE
+
+!             EXPONENTIALLY INTERPOLATE:
+              DENPTH(KSPEC,JNEXT)=DPEXNT(DBLE(DENSTY(KSPEC,ILO)),       &
+     &                                 DBLE(DENSTY(KSPEC,IHI)),ZNTERP)
+          ENDIF
+      ENDDO
+      IF(LSAP)THEN
+
+!         CHECK FOR SOLAR OR GROUND-TO-SPACE VERTICAL PATH:
+          IF(.NOT.LOSSAP)THEN
+              IF(IHI.LE.LEVSAP)THEN
+                  DO IWVSAP=1,NWVSAP
+                      BPSAPX(IWVSAP,JNEXT)                              &
+     &                  =DPEXNT(DBLE(BSAPX(IWVSAP,ILO)),                &
+     &                          DBLE(BSAPX(IWVSAP,IHI)),ZNTERP)
+                      BPSAPA(IWVSAP,JNEXT)                              &
+     &                  =DPEXNT(DBLE(BSAPA(IWVSAP,ILO)),                &
+     &                          DBLE(BSAPA(IWVSAP,IHI)),ZNTERP)
+                  ENDDO
+              ELSE
+                  DO IWVSAP=1,NWVSAP
+                      BPSAPX(IWVSAP,JNEXT)=0.D0
+                      BPSAPA(IWVSAP,JNEXT)=0.D0
+                  ENDDO
+              ENDIF
+
+!         LINE-OF-SIGHT PATH:
+          ELSEIF(IHI.LE.LEVSAP)THEN
+              DO IWVSAP=1,NWVSAP
+                  BPSAPX(IWVSAP,JNEXT)=DPEXNT(DBLE(BSAPX(IWVSAP,ILO)),  &
+     &              DBLE(BSAPX(IWVSAP,IHI)),ZNTERP)
+                  BPSAPA(IWVSAP,JNEXT)=DPEXNT(DBLE(BSAPA(IWVSAP,ILO)),  &
+     &              DBLE(BSAPA(IWVSAP,IHI)),ZNTERP)
+                  ASMSAP(IWVSAP,JNEXT)=LEGSAP(1,IWVSAP,ILO)             &
+     &              +ANTERP*(LEGSAP(1,IWVSAP,IHI)-LEGSAP(1,IWVSAP,ILO))
+                  DO IANSAP=1,NANSAP
+                      PFPSAP(IANSAP,IWVSAP,JNEXT)                       &
+     &                  =SNGL(PFSAP(IANSAP,IWVSAP,ILO)                  &
+     &                  +ZNTERP*(PFSAP(IANSAP,IWVSAP,IHI)               &
+     &                          -PFSAP(IANSAP,IWVSAP,ILO)))
+                  ENDDO
+              ENDDO
+          ELSE
+              DO IWVSAP=1,NWVSAP
+                  BPSAPX(IWVSAP,JNEXT)=0.D0
+                  BPSAPA(IWVSAP,JNEXT)=0.D0
+                  ASMSAP(IWVSAP,JNEXT)=0.
+                  DO IANSAP=1,NANSAP
+                      PFPSAP(IANSAP,IWVSAP,JNEXT)=0.
+                  ENDDO
+              ENDDO
+          ENDIF
+      ENDIF
+
+!     MCSCENE INTERPOLATIONS (CHECK FOR 'C'; RESET TO 'M' IN CARD5):
+      IF(AMOD3D.EQ.'C')THEN
+          DO IMOL=3,NMOLXT
+              UMX_FP(IMOL,JNEXT)                                        &
+     &          =EXPINT(UMX_FM(IMOL,ILO),UMX_FM(IMOL,IHI),ANTERP)
+          ENDDO
+          DO IMOL=1,NMOLY
+              AUX_FP(IMOL,JNEXT)                                        &
+     &          =EXPINT(AUX_FM(IMOL,ILO),AUX_FM(IMOL,IHI),ANTERP)
+          ENDDO
+      ENDIF
+      RETURN
+      END

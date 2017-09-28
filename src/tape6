@@ -1,0 +1,32 @@
+
+ ********************************************************
+ *                                                      *
+ *  MODTRAN5:  Developmental Version 3.5  February 2008 *
+ *                                                      *
+ *  Developed collaboratively by SPECTRAL SCIENCES,     *
+ *  INC. (www.spectral.com) and the AIR FORCE RESEARCH  *
+ *  LABORATORY (www.vs.afrl.af.mil/Division/VSBYB)      *
+ *                                                      *
+ ********************************************************
+
+ Calculations will be done using multiple scattering.
+
+ CARD 1  *****MMF 7    2    2   -1    0    0    0    0    0    0    2    1    0 255.522BRDF   
+
+ PROGRAM WILL COMPUTE RADIANCE + SOLAR SCATTER
+
+ ATMOSPHERIC MODEL
+         TEMPERATURE =    7     USER PROFILES       
+         WATER VAPOR =    7     USER PROFILES       
+         OZONE       =    7     USER PROFILES       
+                      M4 =     0 M5 =     0 M6 =     0 MDEF =     2
+
+ CARD 1A *****TFT  8 0.0 370.70776       1.0       1.0F  T F F F  1360.000    0.0000    0.0000    0.0000    0.0000         0
+
+ MOLECULAR BAND MODEL DATA FILES
+ -------------------------------
+ DATA/15_2008c.bin
+ DATA/15_2008t.bin
+
+ Error in OPENBM:  The molecular band model data file DATA/15_2008c.bin
+                   does not exist.

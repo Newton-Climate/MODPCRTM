@@ -1,0 +1,8 @@
+Changes Made to Modpcrtm 
+
+Parallelized code by modifying driver and other subroutines to take in thread numbers as arguements
+Linked object files into library
+Created Fortran Test Script in/test/multicall.F90
+Created build script that cleans objects, makes modpcrtm, links libraries, and compiles test script
+Added a subroutine to remove unnecessary files e.g. /src/rmfil.f
+

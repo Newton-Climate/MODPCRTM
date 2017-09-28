@@ -1,0 +1,91 @@
+Job 1420524[21].pbspl1.nas.nasa.gov started on Tue Mar 07 23:13:33 PST 2017
+The job requested the following resources:
+    ncpus=24
+    place=scatter:excl
+    walltime=01:00:00
+
+PBS set the following environment variables:
+        FORT_BUFFERED = 1
+                   TZ = PST8PDT
+
+On r579i7n14:
+Warning: no access to tty (Bad file descriptor).
+Thus no job control in this shell.
+Current directory is /nobackupp2/nhnguye3/modpcrtm
+21
+21 44
+Tue Mar  7 23:13:39 PST 2017
+Tue Mar  7 23:13:39 PST 2017
+n = 23
+n = 22
+Tue Mar  7 23:13:39 PST 2017
+n = 21
+Tue Mar  7 23:13:39 PST 2017
+n = 24
+Tue Mar  7 23:13:39 PST 2017
+n = 25
+Tue Mar  7 23:13:39 PST 2017
+n = 26
+Tue Mar  7 23:13:39 PST 2017
+n = 27
+Tue Mar  7 23:13:40 PST 2017
+n = 28
+Tue Mar  7 23:13:40 PST 2017
+n = 29
+Tue Mar  7 23:13:40 PST 2017
+n = 30
+Tue Mar  7 23:13:40 PST 2017
+n = 31
+Tue Mar  7 23:13:40 PST 2017
+n = 33
+Tue Mar  7 23:13:40 PST 2017
+n = 32
+Tue Mar  7 23:13:40 PST 2017
+n = 35
+Tue Mar  7 23:13:40 PST 2017
+n = 34
+Tue Mar  7 23:13:40 PST 2017
+n = 37
+Tue Mar  7 23:13:40 PST 2017
+n = 36
+Tue Mar  7 23:13:40 PST 2017
+n = 38
+Tue Mar  7 23:13:40 PST 2017
+n = 40
+Tue Mar  7 23:13:40 PST 2017
+n = 39
+Tue Mar  7 23:13:40 PST 2017
+n = 41
+Tue Mar  7 23:13:40 PST 2017
+n = 42
+Tue Mar  7 23:13:40 PST 2017
+n = 43
+Tue Mar  7 23:13:40 PST 2017
+n = 44
+==============================================================================
+LUSTRE Filesystem Statistics
+------------------------------------------------------------------------------
+  nbp2 Metadata Operations
+       open     close      stat    statfs   read (GB)  write (GB)
+         48        48       321         0           1           0
+  Read     4KB     8KB    16KB    32KB    64KB   128KB   256KB   512KB  1024KB
+             1       0       0       0       0       0       0       0       0
+ Write     4KB     8KB    16KB    32KB    64KB   128KB   256KB   512KB  1024KB
+             0       0       0       0       0       0       0       0       0
+
+____________________________________________________________________
+Job Resource Usage Summary for 1420524[21].pbspl1.nas.nasa.gov
+
+    CPU Time Used            : 00:00:04
+    Real Memory Used         : 736kb
+    Walltime Used            : 00:00:08
+    Exit Status              : 0
+
+    Number of CPUs Requested : 24
+    Walltime Requested       : 01:00:00
+
+    Execution Queue          : normal
+    Charged To               : s0921
+
+    Job Stopped              : Tue Mar  7 23:13:46 2017
+____________________________________________________________________

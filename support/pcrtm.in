@@ -1,0 +1,10 @@
+$
+ &InOutPar
+
+    GridFile   = './support/OSSEIndex_109.asc'
+    ParFile    = './support/ParamUpOSSE.asc'
+                                          
+    
+
+
+ /
