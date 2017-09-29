@@ -1,5 +1,11 @@
 Changes Made to Modpcrtm 
 
+Commit #3 changes:
+Changed compilor from ifort to mpif90 (see Makefile)
+Got rid of second compilation in /test/ folder and hence executable can be run after compilation e.g. make
+Changed Modtrn.f to call subroutine that runs driver in parallel. 
+
+Commit #1 and #2 Changes:
 Parallelized code by modifying driver and other subroutines to take in thread numbers as arguements
 Linked object files into library
 Created Fortran Test Script in/test/multicall.F90
