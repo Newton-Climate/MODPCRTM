@@ -2,8 +2,8 @@ O = obj-ifort/
 S = src/
 
 DEFINES = -DBRDF_COUPLING -DDISORT_BOUND_SRC -DDISORT_HORIZON -DSEA_BRDF -DDIREM_OPTIMIZATION
-LINK       = ifort -O -o
-COMPILE    = ifort -O0 -i4 -fpp -g -mcmodel=medium -shared-intel $(DEFINES)   -c
+LINK       = mpif90 -O -o
+COMPILE    = mpif90 -O4 -fpp -mcmodel=medium -shared-intel $(DEFINES)   -c
 EXECUTABLE = Mod5300alpha-ifort.exe
 
 $(O)%.o: $(S)%.f
@@ -12,7 +12,7 @@ $(O)%.o: $(S)%.f
 $(O)%.o: $(S)%.f90
 	$(COMPILE) $< -o $@
 
-OBJS := $(O)Modtrn.o $(O)cirmod.o \
+OBJS := $(O)Modtrn.o $(O)run_modpcrtm.o $(O)cirmod.o \
 	$(O)cldmod.o $(O)abcdta.o \
 	$(O)aerext.o $(O)aermrg.o \
 	$(O)aernsm.o $(O)aerprf.o \
@@ -55,6 +55,7 @@ OBJS := $(O)Modtrn.o $(O)cirmod.o \
 	$(O)dgrd.o   $(O)disbbf.o \
 	$(O)disort.o $(O)dpandx.o \
 	$(O)dpfish.o $(O)dprarf.o \
+$(O)rmfil.o \
 	$(O)dpscht.o $(O)driver.o \
 	$(O)dstdta.o $(O)errmsg.o \
 	$(O)exabin.o $(O)expint.o \
@@ -158,7 +159,7 @@ OBJS := $(O)Modtrn.o $(O)cirmod.o \
 	$(O)ch4_hi.o $(O)d_loop.o $(O)i_loop.o $(O)t_loop.o \
 	$(O)seg5.o $(O)seg5ms.o \
 	$(O)bmod0.o $(O)loop0.o $(O)doslit.o $(O)wthead.o $(O)wrtplt.o \
-	$(O)sbrdf.o $(O)rmfil.o
+	$(O)sbrdf.o 
 
 $(EXECUTABLE): $(OBJS)
 	$(LINK) $(EXECUTABLE) $(OBJS)

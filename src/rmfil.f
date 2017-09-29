@@ -20,9 +20,9 @@
       open(unit=25, iostat=stat, file=FLRT(1:LNFLRT)//LABEL//'.acd',     &
      &       status='old')
       if (stat == 0) close(25, status='delete')
-!      open(unit=2, iostat=stat, file=FLRT(1:LNFLRT)//LABEL//'.tp6',     & 
-!     &     status='old')
-!      if (stat == 0) close(2, status='delete')
+      open(unit=2, iostat=stat, file=FLRT(1:LNFLRT)//LABEL//'.tp6',     & 
+     &     status='old')
+      if (stat == 0) close(2, status='delete')
 
       open(unit=7, iostat=stat, file=FLRT(1:LNFLRT)//LABEL//'.tp7',     & 
      &     status='old')

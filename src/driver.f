@@ -2,7 +2,7 @@
       IMPLICIT NONE
 
 !     PARAMETERS:
-!      ID: Thread number handled by MPI
+!      THREAD: Thread number handled by MPI
 !       MAXDAT   MAXIMUM LAYERS*FREQUENCIES*KNTRVL VALUES ALLOWED
 !                FOR STORING MULTIPLE SCATTERING DATA.
       INTEGER MAXDAT,ID
@@ -459,7 +459,6 @@
       irec = 0
 
       DO itp5 = 1, ntp5
-      write(*,*), 'Opened root files'
          READ(ifntp5,'(A80)') ctape5fn
 
       IF(LJMASS)OUTPUTCOUNT=0
@@ -470,11 +469,9 @@
 
    10 CONTINUE
       INITC1=.TRUE.
-!      WRITE(*,*), 'Going into FNAMES'
-      WRITE(*,*), CTAPE5FN
+!      WRITE(*,*), CTAPE5FN
       CALL FNAMES(NMFLRT,CTAPE5FN,CLRT,SPFLUX,DBOUT,REFPTH)
 
-!      WRITE(*,*), 'Got past fnames.f'
       IF(NMFLRT.EQ.-1)RETURN
 
 !     START CALCULATION:
@@ -493,39 +490,35 @@
 
 !     CARD 1:
       CALL CD1(NLOS,TPTMPS,APPREF,LMODEL,LYMOL,INITC1,KPRINT,CLRT)
-      write(*,*), 'Calling Cd1 Subroutine'
 !GLUT CALL CD1(NLOS,APPREF,LMODEL,CLRT,DODB)
       ITYPKP=ITYPE
       IF(LJMASS)TPTMPS=TPTEMP(1)
-      WRITE(*,*) 'IN CARD 1'
 !     BINARY FILE NAMES:
       CALL FNAMBN(PLTOUT,LNFLRT,FLRT)
 
 !     CARD 1A:
       CALL CD1A(LENN(1),ASTMC,ASTMX,ASTMO,AERRH,LNFILT,LENDAT,KNTRVL,   &
      &  LASTM,LDASTM,NSSALB,RHASYM,KPRINT)
-      print '(a)', 'Card 1 Done'
 
 !     CARD 2 AEROSOL MODEL:
       CALL CD2(LAPLUS,LMODEL,ICH,LNFLRT,FLRT)
-      print '(a)', 'Card 2 Done'
 
 !     CARD 2A CLOUD MODEL:
       CALL CD2A(LMODEL)
-      print '(a)', 'Card 2A Done'
+!      print '(a)', 'Card 2A Done'
 
 !     CARD 2B VERTICAL STRUCTURE ALGORITHM:
       CALL CD2B
-      print '(a)', 'Card 2B Done'
+!      print '(a)', 'Card 2B Done'
 
 !     CARD 2C USER-DEFINED PROFILES:
       CALL CD2C(LMODEL,LAPLUS,LENDAT,MARIC1,MARK,JPRT,ICH,              &
      &  H2OCOL,O3COL,LYMOL,REARTH)
-      print '(a)', 'Card 2C Done'
+!      print '(a)', 'Card 2C Done'
 
 !     CARD 2E USER-SUPPLIED AEROSOL EXTINCTION, ABSORPTION & ASYMMETRY:
       CALL CD2E
-      print '(a)', 'Card 2E Done'
+!      print '(a)', 'Card 2E Done'
 
 !     RE-ENTRY FOR REPEAT GEOMETRY INPUT OPTION (IRPT=3):
    30 CONTINUE
@@ -533,11 +526,11 @@
 
 !     CARD 3 GEOMETRY IPUTS:
       CALL CD3(1,REFPTH)
-      print '(a)', 'Card 3 Done'
+!      print '(a)', 'Card 3 Done'
 
 !     CARD 3A SOLAR GEOMETRY INPUTS:
       CALL CD3A(ANGLEM,IDAY,ISOURC)
-      print '(a)', 'Card 3A Done' 
+!      print '(a)', 'Card 3A Done' 
 
 !     RE-ENTRY FOR REPEAT SPECTRAL INPUT OPTION (IRPT=4):
    40 CONTINUE
@@ -545,12 +538,12 @@
 !     CARD 4 SPECTRAL INPUTS (UNLESS ONLY GEOMETRY CHANGED):
       IF(IRPT.NE.3)CALL CD4(ICH(1),MARIC1,MARK,NLOS,LNFILT,             &
      &  I_SCAN,FWSCAN,DEGALL,PLTOUT,SPFLUX,NMFLRT,LNFLRT,FLRT)
-      print '(a)', 'Card 4 Done'
+!      print '(a)', 'Card 4 Done'
 
 !     INITIALIZE COOLING RATE FITTING COEFFICIENTS:
       IF(IMULT.NE.0)CALL COOL0(IRPT)
 
-           write(*,*), 'Beginning Scratch File Writing'
+!           write(*,*), 'Beginning Scratch File Writing'
 !     DO NOT CREATE A MULTIPLE SCATTERING SCRATCH
 !     FILE IF IT WILL BE EXCESSIVELY LARGE.
       IF(LSAVMS)THEN
@@ -569,28 +562,27 @@
      &          ' SAVED IN A SCRATCH FILE FOR SUBSEQUENT USE. ***'
           ENDIF
       ENDIF
-      write(*,*), 'Finished Scratch File for Scattering'
+!      write(*,*), 'Finished Scratch File for Scattering'
 
 !     COMPUTE COLUMN DENSITY DATA:
       TPTEMP(1)=TPTMPS
       ZMAX=ZM(ML)
       
-      write(*,*), 'Computing Column Densities and assigning variables'
+!      write(*,*), 'Computing Column Densities and assigning variables'
       IF(.NOT.GEODRV(GROUND,KPRINT,LDASTM,LASTM,ASTMC,ASTMX,            &
      &  RHASYM,AERRH,ZMAX,1,H1SAV(1),H2SAV(1),OZENSV(1),                &
      &  RNGSAV(1),BETASV(1),HMINSV(1),BZENSV(1),                        &
      &  LENNSV(1),IKMAXS,KNTRVL,ICH,LNFLRT,FLRT,LABEL))THEN
-      print '(a)', 'Got past column densities' 
 
 !         GEOMETRY ERROR DETECTED:
           IF(LJMASS)THEN
-      write(*,*), 'Second Condition Envoked! exitting program'
+!      write(*,*), 'Second Condition Envoked! exitting program'
               CALL WRTBUF(FATAL)
               RETURN
           ENDIF
 
 !         READ REMAINDER OF INPUTS AFTER A GEOMETRY ERROR DETECTED.
-      write(*,*), 'GEometry Errors detected, reading remainders'
+!      write(*,*), 'GEometry Errors detected, reading remainders'
           CALL GEOERR(NLOS,LENDAT,LNFLRT,IRPTSV,FLRT,LABEL)
           GOTO 60
       ENDIF
@@ -610,20 +602,20 @@
 
 !             GEOMETRY ERROR DETECTED:
               IF(LJMASS)THEN
-             write(*,*), 'Geometry Error detected, exitting program'
+!             write(*,*), 'Geometry Error detected, exitting program'
                   CALL WRTBUF(FATAL)
                   RETURN
               ENDIF
 
 !             READ REMAINDER OF INPUTS AFTER A GEOMETRY ERROR DETECTED
-      write(*,*), 'Reading remainders after Geometry Error'
+!      write(*,*), 'Reading remainders after Geometry Error'
               CALL GEOERR(NLOS,LENDAT,LNFLRT,IRPTSV,FLRT)
               GOTO 60
           ENDIF
 
 !     END LOOP OVER ADDITIONAL LINE-OF-SIGHT PATHS:
       ENDDO
-      write(*,*), 'done with do loop'
+!      write(*,*), 'done with do loop'
 
 !     SURFACE REFLECTANCE MODEL
       AATEMP=0.
@@ -641,7 +633,7 @@
 
 !     The BRDF Model was read in RFLECT and was used to determine Land/Ocean flag.
       call PCRTM_INIT
-      print '(a)', 'Calling PCRTM_INIt'
+!      print '(a)', 'Calling PCRTM_INIt'
 
 !     AREA-AVERAGED SURFACE TEMPERATURE (IF NOT YET DEFINED):
       IF(AATEMP.LE.0.)THEN
@@ -684,7 +676,7 @@
      &      GROUND,KNTRVL,NLOS,LNFILT,GETS05,APPREF,DH2O,               &
      &      MLTRFL,NCHALL,RADOUT)
       ELSEIF(RESCHR.EQ.'15' .AND. .NOT.LSUN)THEN
-      print '(a)', 'Initializing Card 5'
+!      print '(a)', 'Initializing Card 5'
 
 !         USE SOLAR IRRADIANCE DATA STORED IN /SOL15/:
           CALL TRANS(RESCHR,IPH,ISOURC,IDAY,ANGLEM,                     &
@@ -865,7 +857,7 @@
       close(617)
       close(618)
       CALL RMFIL
-      print '(a)', 'Subroutine Driver is finished running'
+!      print '(a)', 'Subroutine Driver is finished running'
       RETURN
       END
 

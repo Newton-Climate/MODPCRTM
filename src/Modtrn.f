@@ -1,5 +1,6 @@
       PROGRAM MDTRN5
-      CALL DRIVER(4)
+!      CALL DRIVER(4)
+         CALL RUN_MODPCRTM
 
 !     AN ASCII VERSION OF SECTION 2 OF THE MODTRAN4 USER's
 !     Manual is included below for reference.

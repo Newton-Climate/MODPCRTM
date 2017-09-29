@@ -267,7 +267,7 @@
       IF(NPR.GT.-2)RETURN
       IF(.NOT.LJMASS) THEN
          IF(ILO.LE.ML)WRITE(ISPCCR,FMT=FRMT)HEADER,(DBLE(PM(I)),I=ILO,  &
-&      ML)
+     &      ML)
          WRITE(ISPCCR,'(/(A))')'    FREQ   SPECTRAL COOLING RATES',     &
      &                         '    CM-1   K DAY-1 / CM-1'
       ENDIF

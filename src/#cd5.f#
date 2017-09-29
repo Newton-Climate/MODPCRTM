@@ -1,4 +1,6 @@
       SUBROUTINE CD5(FLRT,LNFLRT,H2OCOL,O3COL,TPTMPS)
+      
+      
 
 !     WRITE HEADER FOR SPECTRAL OUTPUT FILES AND READ TAPE5:
       IMPLICIT NONE
@@ -313,7 +315,7 @@
      &              'CD5')
               ELSE
                   CALL OPNFL(IPUSCN,0,FLRT(1:LNFLRT)//LABEL//'.7sc',    &
-     &               'UNKNOWN', 'FORMATTED','CD5')
+ &               'UNKNOWN', 'FORMATTED','CD5')
               ENDIF
           ENDIF
 
