@@ -1,0 +1,345 @@
+      SUBROUTINE VSA(IHAZE,VIS,CEILHT,DEPTH,ZINVHT,ZVSA,RH,AHAZE,IH)
+
+!     VERTICAL STRUCTURE ALGORITHM
+
+!     FROM U.S. ARMY ATMOSPHERIC SCIENCES LAB
+!     WHITE SANDS MISSILE RANGE, NM
+
+!     CREATES A PROFILE OF AEROSOL DENSITY NEAR THE GROUND,INCLUDING
+!     CLOUDS AND FOG
+
+!     THESE PROFILES ARE AT 9 HEIGHTS BETWEEN 0 KM AND 2 KM
+
+!  ***VISIBILITY IS ASSUMED TO BE THE SURFACE VISIBILITY***
+
+!     IHAZE  = THE TYPE OF AEROSOL
+!     VIS    = VISIBILITY IN KM AT THE SURFACE
+!     CEILHT = THE CLOUD CEILING HEIGHT IN KM
+!     DEPTH  = THE CLOUD/FOG DEPTH IN KM
+!     ZINVHT = THE HEIGHT OF INVERSION OR BOUNDARY LAYER IN KM
+
+!     VARIABLES USED IN VSA
+
+!     ZC     = CLOUD CEILING HEIGHT IN M
+!     ZT     = CLOUD DEPTH IN M
+!     ZINV   = INVERSION HEIGHT IN M
+!           SEE BELOW FOR MORE INFORMATION ABOUT ZC, ZT, AND ZINV
+!     D      = INITIAL EXTINCTION AT THE SURFACE (D=3.912/VIS-0.01159)
+!     ZALGO  = THE DEPTH OF THE LAYER FOR THE ALGORITHM
+
+!     OUTPUT FROM VSA:
+
+!     ZVSA   = HEIGHT IN KM
+!     RH     = RELATIVE HUMIDITY AT HEIGHT Z IN PERCENT
+!     AHAZE  = EXTINCTION AT HEIGHT Z IN KM**-1
+!     IH     = AEROSAL TYPE FOR HEIGHT Z
+!     HMXVSA = MAXIMUM HEIGHT IN KM USED IN VSA, NOT NECESSARILY 2.0 KM
+
+!     THE SLANT PATH CALCULATION USES THE FOLLOWING FUNCTION:
+
+!                 EXT55=A*EXP(B*EXP(C*Z))
+
+!     WHERE 'ZVSA' IS THE HEIGHT IN KILOMETERS,
+!           'A' IS A FUNCTION OF EXT55 AT Z=0.0 AND IS ALWAYS POSITIVE,
+!           'B' AND 'C' ARE FUNCTIONS OF CLOUD CONDITIONS AND SURFACE
+!               VISIBILITY (EITHER A OR B CAN BE POSITIVE OR NEGATIVE),
+!           'EXT55' IS THE VISIBILE EXTINCTION COEFFICIENT IN KM**-1.
+
+!     THEREFORE, THERE ARE 4 CASES DEPENDING ON THE SIGNS OF 'B' AND 'C'
+!     CEILHT AND ZINVHT ARE USED AS SWITCHES TO DETERMINE WHICH CASE
+!     TO USE.  THE SURFACE EXTINCTION 'D' IS CALCULATED FROM THE
+!     VISIBILITY USING  D=3.912/VIS-0.01159 AS FOLLOWS-
+
+!         CASE=1  FOG/CLOUD CONDITIONS
+!                 'B' LT 0.0, 'C' LT 0.0
+!                 'D' GE 7.0   KM**-1
+!                 FOR A CLOUD 7.    KM**-1 IS THE BOUNDARY VALUE AT
+!                 THE CLOUD BASE AND 'Z' IS THE VERTICAL DISTANCE
+!                 INTO THE CLOUD.
+!                 VARIABLE USED:   DEPTH
+!                 ** DEFAULT:  DEPTH OF FOG/CLOUD IS 0.2 KM WHEN
+!                              'DEPTH' IS 0.0
+
+!             =2  CLOUD CEILING PRESENT
+!                 'B' GT 0.0, 'C' GT 0.0
+!                 VARIABLE USED:   CEILHT (MUST BE GE 0.0)
+!                 ** DEFAULTS:  CASE 2 - CEILHT IS CALCULATED FROM
+!                               SURFACE EXTINCTION
+
+!             =3  RADIATION FOG OR INVERSION OR BOUNDARY LAYER PRESENT
+!                 'B' LT 0.0, 'C' GT 0.0
+!                 VIS LE 2.0 KM DEFAULTS TO A RADIATION FOG AT THE
+!                     GROUND AND OVERRIDES INPUT BOUNDARY AEROSOL TYPE
+!                 VIS GT 2.0 KM FOR AN INVERSION OR BOUNDARY LAYER
+!                     WITH INPUT BOUNDARY AEROSOL TYPE
+!                 ** IHAZE=9 (RADIATION FOG) ALWAYS DEFAULTS TO A
+!                    RADIATION FOG NO MATTER WHAT THE VISIBILITY IS.
+!                 SWITCH VARIABLE: CEILHT (MUST BE LT 0.0)
+!                 VARIABLE USED:   ZINVHT (MUST BE GE 0.0)
+!                 ** CEILHT MUST BE LT 0.0 FOR ZINVHT TO BE USED **
+!                    HOWEVER, IF DEPTH IS GT 0.0 AND ZINVHT IS EQ 0.0,
+!                    THE PROGRAM WILL SUBSTITUTE DEPTH FOR ZINVHT.
+!                 ** DEFAULT:  FOR A RADIATION FOG ZINVHT IS 0.05 K
+!                              FOR AN INVERSION LAYER ZINVHT IS 2.0 KM
+
+!           NOTE: IF IHAZE = 9, BUT VIS GT 2.0 KM RECOMEND
+!           THAT IHAZE DEFAULT TO RURAL AEROSOL
+
+!             =4  NO CLOUD CEILING, INVERSION LAYER, OR BOUNDARY
+!                 LAYER PRESENT, I.E. CLEAR SKIES
+!                 EXTINCTION PROFILE CONSTANT WITH HEIGHT A SHORT
+!                 DISTANCE ABOVE THE SURFACE
+      IMPLICIT NONE
+
+!     PARAMETERS:
+      INCLUDE 'PARAMS.h'
+
+!     ARGUMENTS:
+      INTEGER IHAZE,IH(10)
+      REAL VIS,CEILHT,DEPTH,ZINVHT,RH(10),AHAZE(10)
+      DOUBLE PRECISION ZVSA(10)
+
+!     COMMONS:
+      INCLUDE 'IFIL.h'
+
+!     LOCAL VARIABLES:
+      INTEGER IC,K,I
+      REAL ZHIGH,HMXVSA,D,ZT,ZC,ZINV,E,ANUM,F,DF,ZALGO,VISIB
+
+!     DECLARE BLOCK DATA ROUTINES EXTERNAL:
+      EXTERNAL DEVCBD
+      REAL A(2),B(2),C(2)
+
+!     DATA:
+!       THE LAST 3 VALUES OF EE BELOW ARE EXTINCTIONS FOR VISIBILITIES
+!       EQUAL TO 5.0, 23.0, AND 50.0 KM, RESPECTIVELY.
+      REAL AA(2),CC(3),EE(4),FAC1(9),FAC2(9)
+      DATA AA/92.1,.3981/,CC/-.014,.0125,-.03 /
+      DATA EE/7.0,0.7824,0.17009,0.01159/
+      DATA FAC1/0.0,0.03,0.05,0.075,0.1,0.18,0.3,0.45,1.0/
+      DATA FAC2/0.0,0.03,0.1,0.18,0.3,0.45,0.6,0.78,1.0/
+
+!     HEADER:
+      IF(.NOT.LJMASS)                                                   &
+     &  WRITE(IPR,'(/A)')' VERTICAL STRUCTURE ALGORITHM (VSA) USED.'
+
+!     UPPER LIMIT ON VERTICAL DISTANCE - 2 KM
+      ZHIGH=2000.
+      HMXVSA=ZHIGH
+      IF(VIS.LE.0.)THEN
+
+!         DEFAULT FOR VISIBILITY DEPENDS ON THE VALUE OF IHAZE.
+!         IF(IHAZE.EQ.3)VIS= OR IHAZE = 10 VIS IS DETERMINED ELSEWHERE.
+          IF(IHAZE.EQ.8)THEN
+              VIS=.2
+          ELSEIF(IHAZE.EQ.9)THEN
+              VIS=.5
+          ELSEIF(IHAZE.EQ.2 .OR. IHAZE.EQ.5)THEN
+              VIS=5.
+          ELSEIF(IHAZE.EQ.1 .OR. IHAZE.EQ.4 .OR. IHAZE.EQ.7)THEN
+              VIS=23.
+          ELSEIF(IHAZE.EQ.6)THEN
+              VIS=50.
+          ENDIF
+      ENDIF
+      D=3.912/VIS-0.01159
+
+!     CONVERT FROM KM TO M:
+      ZT=1000*DEPTH
+      IF(IHAZE.EQ.9)THEN
+
+!         IHAZE=9 (RADIATION FOG) IS CALCULATED AS A RADIATION FOG.
+          ZC=-1.
+      ELSE
+          ZC=1000*CEILHT
+      ENDIF
+
+!     CHECK TO SEE IF THE FOG DEPTH FOR A RADIATION FOG WAS
+!     INPUT TO DEPTH INSTEAD OF THE CORRECT VARIABLE ZINVHT.
+      ZINV=1000*ZINVHT
+      IF(IHAZE.EQ.9 .AND. ZT.GT.0. .AND. ZINV.EQ.0.)ZINV=ZT
+
+!     'IC' DEFINES WHICH CASE TO USE.
+      IF(D.GE.EE(1) .AND. ZC.GE.0.)THEN
+          IC=1
+      ELSEIF(ZC.LT.0.)THEN
+          IC=3
+          IF(ZINV.LT.0.)IC=4
+      ELSE
+          IC=2
+      ENDIF
+      K=1
+      GOTO (10,20,30,40),IC
+
+!     CASE 1:  DEPTH FOG/CLOUD; INCREASING EXTINCTION WITH HEIGHT FROM
+!              CLOUD/FOG BASE TO CLOUD/FOG TOP.
+   10 CONTINUE
+          IF(ZC.LT.HMXVSA .AND. IC.EQ.2)K=2
+
+!         IC=-1 WHEN A CLOUD IS PRESENT AND THE PATH GOES INTO IT.
+!         USE CASE 2 OR 2' BELOW CLOUD AND CASE 1 INSIDE IT.
+          IF(K.EQ.2)IC=-1
+
+!         THE CLOUD BASE HAS AN EXTINCTION COEFFICIENT OF 7. KM-1.
+          IF(K.EQ.2)D=EE(1)
+          A(K)=AA(1)
+
+!         IF THE SURFACE EXTINCTION EXCEEDS THE UPPER LIMIT OF 92.1
+!         KM**-1, RUN THE ALGORITHM WITH AN UPPER LIMIT OF 'D+10'.
+          IF(D.GE.AA(1))A(K)=D+10.
+          C(K)=CC(1)
+          IF(.NOT.LJMASS)THEN
+              IF(ZT.LE.0.)THEN
+                  WRITE(IPR,'(/(51X,A))')'CLOUD DEPTH UNKNOWN.',        &
+     &              'VSA WILL USE A DEFAULT OF 200 METERS.'
+              ELSE
+                  WRITE(IPR,'(/51X,A,F15.1,A)')                         &
+     &              'CLOUD DEPTH IS',ZT,' METERS.'
+              ENDIF
+          ENDIF
+!         IF THE DISTANCE FROM THE GROUND TO THE CLOUD/FOG TOP IS LESS
+!         THAN 2. KM, VSA WILL ONLY CALCULATE UP TO THE CLOUD TOP.
+          IF(ZT.LE.0.)ZT=200.
+          HMXVSA=AMIN1(ZT+ZC,HMXVSA)
+          GOTO 50
+
+!     CASE 2:  CLEAR/HAZY/LIGHTLY FOGGY; INCREASING EXTINCTION WITH HEIG
+!              UP TO THE CLOUD BASE.
+   20 CONTINUE
+          A(K)=AA(2)
+          E=EE(1)
+          IF(ZC.EQ.0.)THEN
+              ANUM=LOG(E/A(K))/LOG(D/A(K))
+              IF(ANUM.GT.0.)THEN
+                  ZC=LOG(ANUM)/CC(2)
+              ELSE
+                  ZC=2000.
+              ENDIF
+              IF(.NOT.LJMASS)WRITE(IPR,'(/51X,A,/40X,A,F8.1,A)')        &
+     &          'CLOUD CEILING HEIGHT UNKNOWN.',                        &
+     &          'VSA WILL USE A CALCULATED VALUE OF',ZC,' METERS.'
+          ELSEIF(.NOT.LJMASS .AND. ZC.GT.0.)THEN
+              WRITE(IPR,'(/51X,A,F10.1,A)')                             &
+     &          'CLOUD CEILING HEIGHT IS',ZC,' METERS.'
+          ENDIF
+
+!         F IS A SCALING FACTOR USED IN CASE 2
+          F=(VIS*ZC/350.)**2
+          DF=D/F
+          IF(DF.LT..00001)THEN
+              A(K)=D*(1-DF/2)
+          ELSE
+              A(K)=F*(1.-EXP(-DF))
+          ENDIF
+
+!         COEFFICIENT A IS RECALCULATED BASED UPON THE SCALING FACTOR
+          GOTO 50
+
+!     CASE 3:  NO CLOUD CEILING BUT A RADIATION FOG OR AN INVERSION
+!              OR BOUNDARY LAYER PRESENT; DECREASING EXTINCTION WITH
+!              HEIGHT UP TO THE HEIGHT OF THE FOG OR LAYER.
+   30 CONTINUE
+          A(K)=1.1*D
+          IF(IHAZE.EQ.6 .OR. (VIS.GT.2.0 .AND. IHAZE.NE.9))THEN
+              E=EE(4)
+          ELSEIF(IHAZE.EQ.2 .OR. IHAZE.EQ.5)THEN
+              E=EE(2)
+          ELSE
+              E=EE(3)
+          ENDIF
+          IF(E.GT.D)E=D*.99999
+          IF(ZT.GT.0. .AND. ZINV.EQ.0. .AND. VIS.LE.2.)THEN
+              ZINV=ZT
+          ELSEIF(ZINV.EQ.0.)THEN
+              IF(VIS.LE.2. .OR. IHAZE.EQ.9)THEN
+                  IF(.NOT.LJMASS)WRITE(IPR,'(/(51X,A))')                &
+     &              'RADIATION FOG DEPTH UNKNOWN',                      &
+     &              'VSA WILL USE A DEFAULT OF 50 METERS.'
+                  ZINV=50.
+              ELSE
+                  IF(.NOT.LJMASS)WRITE(IPR,'(/(51X,A))')                &
+     &              'INVERSION OR BOUNDARY LAYER HEIGHT UNKNOWN',       &
+     &              'VSA WILL USE A DEFAULT OF 2000 METERS.'
+                  ZINV=2000.
+              ENDIF
+          ENDIF
+          IF(ZINV.GT.0. .AND. .NOT.LJMASS)THEN
+              IF(VIS.LE.2. .OR. IHAZE.EQ.9)THEN
+                  WRITE(IPR,'(/51X,A,F8.1,A)')                          &
+     &              'DEPTH OF RADIATION FOG IS',ZINV,' METERS.'
+              ELSE
+                  WRITE(IPR,'(/51X,A,F8.1,A)')'INVERSION OR'//          &
+     &              ' BOUNDARY LAYER HEIGHT IS',ZINV,' METERS.'
+              ENDIF
+          ENDIF
+          HMXVSA=AMIN1(ZINV,HMXVSA)
+          ZC=0.
+          GOTO 50
+
+!     CASE 4:  NO CLOUD CEILING OR INVERSION LAYER;
+!              CONSTANT EXTINCTION WITH HEIGHT.
+   40 CONTINUE
+          A(K)=EE(4)
+          C(K)=CC(3)
+
+   50 CONTINUE
+      B(K)=LOG(D/A(K))
+      IF(IC.EQ.2)THEN
+          C(K)=LOG(LOG(E/A(K))/B(K))/ZC
+          IF(ZC.LT.HMXVSA .AND. K.EQ.1)GOTO 10
+          HMXVSA=MIN(ZC,HMXVSA)
+      ELSEIF(IC.EQ.3)THEN
+          C(K)=LOG(LOG(E/A(K))/B(K))/ZINV
+      ENDIF
+      IF(IC.LT.0)THEN
+          ZALGO=ZC
+          K=1
+      ELSE
+          ZALGO=HMXVSA
+      ENDIF
+      IF(IC.LT.0)K=1
+      IF(.NOT.LJMASS)WRITE(IPR,'(/5(5X,A))')'HEIGHT(KM)',               &
+     &  'R.H.(%)','EXTINCTION(KM-1)','VIS(3.912/EXTN)','IHAZE'
+      DO I=1,9
+          IF(IC.LT.0 .AND. I.EQ.5)THEN
+              K=2
+              ZALGO=HMXVSA-ZC
+          ENDIF
+          IF(IC.EQ.1)THEN
+              ZVSA(I)=DBLE(ZALGO*FAC1(I))
+          ELSEIF(IC.EQ.4)THEN
+              ZVSA(I)=DBLE(ZALGO*FLOAT(I-1)/8)
+          ELSEIF(IC.LT.0.)THEN
+              IF(I.LT.5)THEN
+                  ZVSA(I)=DBLE(ZALGO*(1.0-FAC2(11-2*I)))
+              ELSE
+                  ZVSA(I)=DBLE(ZALGO*FAC1(2*I-9))
+              ENDIF
+          ELSE
+              ZVSA(I)=DBLE(ZALGO*(1.-FAC2(10-I)))
+          ENDIF
+          AHAZE(I)=A(K)*EXP(B(K)*EXP(C(K)*SNGL(ZVSA(I))))
+          IF(IC.LE.0 .AND. I.GE.5)ZVSA(I)=ZVSA(I)+DBLE(ZC)
+
+!         CONVERT BACK TO KM FROM M:
+          ZVSA(I)=ZVSA(I)/1000
+          RH(I)=6.953*ALOG(AHAZE(I))+86.407
+          IF(AHAZE(I).GE.EE(1))RH(I)=100.
+          VISIB=3.912/(AHAZE(I)+0.01159)
+          IF(VISIB.LE.2. .AND. IC.EQ.3)THEN
+
+!             IF A RADIATION FOG IS PRESENT (I.E. VIS<=2.0 KM AND IC=3),
+!             IH IS SET TO 9 FOR ALL LEVELS.
+              IH(I)=9
+          ELSEIF(IC.EQ.1 .OR. (IC.LT.0 .AND. I.GE.5))THEN
+
+!             FOR A DEPTH FOG/CLOUD CASE, IH=8 DENOTING ADVECTION FOG.
+              IH(I)=8
+          ELSE
+              IH(I)=IHAZE
+          ENDIF
+          IF(.NOT.LJMASS)WRITE(IPR,'(F14.4,F12.1,E20.4,F18.4,I12)')     &
+     &      ZVSA(I),RH(I),AHAZE(I),VISIB,IH(I)
+      ENDDO
+      RETURN
+      END

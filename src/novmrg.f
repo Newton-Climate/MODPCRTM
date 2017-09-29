@@ -1,0 +1,457 @@
+      SUBROUTINE NOVMRG(ALTNOV,RHNOV,PNOV,TNOV,DENNOV,NLNOV)
+
+!     THIS ROUTINE MERGES TOGETHER NOVAM LEVELS WITH CLOUD/RAIN
+!     AND OLD ATMOSPHERIC PROFILES.  LEVELS ARE MERGED TOGETHER
+!     IF THEY DIFFER BY LESS THAN "ZTOL" KM (HALF A METER).
+!     [THE NOVAM DENSITIES ARE DENSTY(68,*) THROUGH DENSITY(77,*)].
+      IMPLICIT NONE
+
+!     PARAMETERS
+      INCLUDE 'PARAMS.h'
+
+!     ARGUMENTS:
+      INTEGER NLNOV
+      DOUBLE PRECISION ALTNOV(NLNOV)
+      REAL RHNOV(NLNOV),TNOV(NLNOV),PNOV(NLNOV),DENNOV(MNOV,MLNOV)
+
+!     COMMONS:
+      INCLUDE 'IFIL.h'
+      INCLUDE 'YPROP.h'
+      INCLUDE 'BASE.h'
+
+!     /M_PTWO/
+!       PPROF    PRESSURE PROFILE [MB].
+!       TPROF    TEMPERATURE PROFILE [K].
+!       WH2O     H2O VOLUME MIXING RATIO PROFILE [PPMV].
+!       WO3      O3 VOLUME MIXING RATIO PROFILE [PPMV].
+      REAL PPROF,TPROF,WH2O,WO3
+      COMMON/M_PTWO/PPROF(LAYDIM),TPROF(LAYDIM),WH2O(LAYDIM),WO3(LAYDIM)
+
+!     /M_UMIX/
+!       WCO2     CO2 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WN2O     N2O VOLUME MIXING RATIO PROFILE [PPMV].
+!       WCO      CO VOLUME MIXING RATIO PROFILE [PPMV].
+!       WCH4     CH4 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WO2      O2 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WNO      NO VOLUME MIXING RATIO PROFILE [PPMV].
+!       WSO2     SO2 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WNO2     NO2 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WHNO3    HNO3 VOLUME MIXING RATIO PROFILE [PPMV].
+      REAL WCO2,WN2O,WCO,WCH4,WO2,WNO,WSO2,WNO2,WNH3,WHNO3
+      COMMON/M_UMIX/WCO2(LAYDIM),WN2O(LAYDIM),WCO(LAYDIM),              &
+     &  WCH4(LAYDIM),WO2(LAYDIM),WNO(LAYDIM),WSO2(LAYDIM),              &
+     &  WNO2(LAYDIM),WNH3(LAYDIM),WHNO3(LAYDIM)
+
+!     /MDATXY/
+!       WMOLXT   CROSS-SECTION MOLECULE DENSITY PROFILE [PPMV].
+!       WMOLYT   AUXILIARY (Y) MOLECULE DENSITY PROFILE [PPMV].
+      REAL WMOLXT,WMOLYT
+      COMMON/MDATXY/WMOLXT(NMOLX,LAYDIM),WMOLYT(MMOLY,LAYDIM)
+
+!     /GRND/
+!       GNDALT   GROUND ALTITUDE, ABOVE SEA LEVEL [KM].
+      DOUBLE PRECISION GNDALT
+      COMMON/GRND/GNDALT
+
+!     /MPROF/
+!       ZM       PROFILE LEVEL ALTITUDES [KM].
+!       PM       PROFILE LEVEL PRESSURES [MBAR].
+!       TM       PROFILE LEVEL TEMPERATURES [K].
+!       RFNDX    PROFILE LEVEL REFRACTIVITIES.
+!       LRHSET   FLAG, .TRUE. IF RELATIVE HUMIDITY IS NOT TO BE SCALED.
+      DOUBLE PRECISION ZM
+      REAL PM,TM,RFNDX
+      LOGICAL LRHSET
+      COMMON/MPROF/ZM(LAYDIM),PM(LAYDIM),TM(LAYDIM),                    &
+     &  RFNDX(LAYDIM),LRHSET(LAYDIM)
+
+!     /DEN/
+!       DENSTY   PROFILE LEVEL DENSITIES [ATM CM / KM FOR MOST SPECIES].
+      REAL DENSTY
+      COMMON/DEN/DENSTY(0:MEXTXY,1:LAYDIM)
+
+!     /CNTRL/
+!       NSEG     NUMBER OF PATH SEGMENTS ALONG LINE-OF-SIGHT.
+!       ML       NUMBER OF ATMOSPHERIC PROFILE LEVELS.
+!       MLFLX    NUMBER OF LEVELS FOR WHICH FLUX VALUES ARE WRITTEN.
+!       IMULT    MULTIPLE SCATTERING FLAG
+!                  (0=NONE, 1=AT SENSOR, -1=AT FINAL OR TANGENT POINT).
+!       THERML   FLAG TO CALCULATE THERMAL SCATTER.
+      INTEGER NSEG,ML,MLFLX,IMULT
+      LOGICAL THERML
+      COMMON/CNTRL/NSEG(0:MLOSP1),ML,MLFLX,IMULT,THERML
+
+!     BLOCK DATA ROUTINES EXTERNAL:
+      EXTERNAL DEVCBD
+
+!     LOCAL VARIABLES
+      INTEGER NNOV,NEWLEV,IL,IMERGE,I,J,II,MLOLD,INOV
+      LOGICAL LSET
+      REAL FAC,TRATIO
+      DOUBLE PRECISION ALTOFF
+
+!     FUNCTION NAMES
+      REAL EXPINT
+
+      IF(GNDALT.NE.0.D0)WRITE(IPR,'(/2A)')' WARNING:  Ground altitude', &
+     &  ' not at sea level, but NOVAM aerosols are being used.'
+      ALTOFF=ALTNOV(1)-GNDALT
+      ALTNOV(1)=GNDALT
+      DO IMERGE=2,NLNOV
+          ALTNOV(IMERGE)=ALTNOV(IMERGE)-ALTOFF
+      ENDDO
+
+!     CHECK THAT ALTNOV, NOVAM ALTITUDES, ARE BOUNDED BY ZM
+      IF(ALTNOV(1).LT.ZM(1) .OR. ALTNOV(NLNOV).GT.ZM(ML))THEN
+         WRITE(IPR,'(/A,2(F10.5,A),/14X,A,2(F10.5,A))')                 &
+     &        ' FATAL ERROR:  NOVAM BOUNDING ALTITUDES (',              &
+     &        ALTNOV(1),' AND',ALTNOV(NLNOV),' KM) ARE',                &
+     &        ' NOT BRACKETED BY ATMOSPHERE BOUNDING ALTITUDES (',      &
+     &        ZM(1),' AND', ZM(ML),' KM).'
+         IF(LJMASS)CALL WRTBUF(FATAL)
+         STOP
+      ENDIF
+
+!     COMPUTE NUMBER OF NOVAM AEROSOLS; IT'S IN THE COMMON BLOCK COMNOV
+      NNOV=(NLNOV-2)/2
+
+!     TEMPORARILY TRANSLATE LEVEL DATA TO MAXIMUM LAYER INDICES TO
+!     MAKE SPACE FOR ADDITIONAL LAYERS.  KEEP Z(1) WHERE IT IS BECAUSE
+!     IT WILL ALWAYS BE THERE. THAT IS, IT IS THE LOWEST LAYER.
+      NEWLEV=LAYDM1
+      DO IL=ML,2,-1
+         NEWLEV=NEWLEV-1
+         ZM(NEWLEV)=ZM(IL)
+         PPROF(NEWLEV)=PPROF(IL)
+         TPROF(NEWLEV)=TPROF(IL)
+         RELHUM(NEWLEV)=RELHUM(IL)
+         WH2O(NEWLEV)=WH2O(IL)
+         WCO2(NEWLEV)=WCO2(IL)
+         WO3(NEWLEV)=WO3(IL)
+         WN2O(NEWLEV)=WN2O(IL)
+         WCO(NEWLEV)=WCO(IL)
+         WCH4(NEWLEV)=WCH4(IL)
+         WO2(NEWLEV)=WO2(IL)
+         WHNO3(NEWLEV)=WHNO3(IL)
+         WNO(NEWLEV)=WNO(IL)
+         WSO2(NEWLEV)=WSO2(IL)
+         WNO2(NEWLEV)=WNO2(IL)
+         WNH3(NEWLEV)=WNH3(IL)
+         DO I=1,NMOLX
+            WMOLXT(I,NEWLEV)=WMOLXT(I,IL)
+         ENDDO
+         DO I=1,NMOLY
+            WMOLYT(I,NEWLEV)=WMOLYT(I,IL)
+         ENDDO
+
+!        INDICES 7, 12-15 = AEROSOLS, 16 = CIRRUS CLOUD
+         DENSTY(7,NEWLEV)=DENSTY(7,IL)
+         DENSTY(12,NEWLEV)=DENSTY(12,IL)
+         DENSTY(13,NEWLEV)=DENSTY(13,IL)
+         DENSTY(14,NEWLEV)=DENSTY(14,IL)
+         DENSTY(15,NEWLEV)=DENSTY(15,IL)
+         DENSTY(16,NEWLEV)=DENSTY(16,IL)
+
+!        66 = WATER DROPLETS (G/M**3), 67 = ICE PARTICLES (G/M**3)
+!        3 = RAIN RATE (MM/HR)
+         DENSTY(66,NEWLEV)=DENSTY(66,IL)
+         DENSTY(67,NEWLEV)=DENSTY(67,IL)
+         DENSTY(3,NEWLEV)=DENSTY(3,IL)
+
+!        INITIALIZE NOVAM DENSTY (ACTUALLY EXTINCTION COEFF)
+         DENSTY(68,NEWLEV)=0.
+         DENSTY(69,NEWLEV)=0.
+         DENSTY(70,NEWLEV)=0.
+         DENSTY(71,NEWLEV)=0.
+         DENSTY(72,NEWLEV)=0.
+         DENSTY(73,NEWLEV)=0.
+         DENSTY(74,NEWLEV)=0.
+         DENSTY(75,NEWLEV)=0.
+         DENSTY(76,NEWLEV)=0.
+         DENSTY(77,NEWLEV)=0.
+      ENDDO
+
+!     ONE MORE INITIALIZATION
+      DENSTY(68,1)=0.
+      DENSTY(69,1)=0.
+      DENSTY(70,1)=0.
+      DENSTY(71,1)=0.
+      DENSTY(72,1)=0.
+      DENSTY(73,1)=0.
+      DENSTY(74,1)=0.
+      DENSTY(75,1)=0.
+      DENSTY(76,1)=0.
+      DENSTY(77,1)=0.
+
+!     LOOP OVER OLD LAYERS (NOW AT 1, NEWLEV, NEWLEV+1, ... LAYDIM)
+!     TO SEE WHERE NOVAM LAYERS FIT IN
+      IMERGE=1
+      ML = 1
+      DO IL=NEWLEV,LAYDIM
+         LSET=.FALSE.
+   10    CONTINUE
+         IF(ALTNOV(IMERGE).LE.ZM(IL))THEN
+
+!           NOVAM LEVEL WITHIN OLD ATMOSPHERIC LAYER
+            IF(ALTNOV(IMERGE).LT.ZM(ML)+ZTOL)THEN
+
+!              MERGE INTO LOWER LEVEL
+               DO INOV=1,NNOV
+                  DENSTY(67+INOV,ML)=DENNOV(INOV,IMERGE)
+               ENDDO
+               DENSTY(7,ML)=0.
+               TPROF(ML)=TNOV(IMERGE)
+               PPROF(ML)=PNOV(IMERGE)
+               TRATIO=273.15/TPROF(ML)
+
+!              THE FORMULA FOR WH2O IS FROM AERNSM (WH2O IS IN G/M**3)
+               RELHUM(ML)=RHNOV(IMERGE)
+               WH2O(ML)=.01*RELHUM(ML)*TRATIO*                          &
+     &              EXP(18.9766-(14.9595+2.43882*TRATIO)*TRATIO)
+            ELSEIF(ALTNOV(IMERGE).GT.ZM(IL)-ZTOL)THEN
+
+!              MERGE INTO UPPER LEVEL
+               LSET=.TRUE.
+               DO INOV=1,NNOV
+                  DENSTY(67+INOV,IL)=DENNOV(INOV,IMERGE)
+               ENDDO
+               DENSTY(7,IL)=0.
+               TPROF(IL)=TNOV(IMERGE)
+               PPROF(IL)=PNOV(IMERGE)
+               TRATIO=273.15/TPROF(IL)
+
+!              THE FORMULA FOR WH2O IS FROM AERNSM (WH2O IS IN G/M**3)
+               RELHUM(IL)=RHNOV(IMERGE)
+               WH2O(IL)=.01*RELHUM(IL)*TRATIO*                          &
+     &              EXP(18.9766-(14.9595+2.43882*TRATIO)*TRATIO)
+            ELSEIF(ML+1.LT.IL)THEN
+
+!              ADD NEW ZM LEVEL
+               MLOLD=ML
+               ML=ML+1
+               ZM(ML)=ALTNOV(IMERGE)
+!              DENSTY(68,ML)=EXTNOV(4,IMERGE)
+               DO INOV=1,NNOV
+                  DENSTY(67+INOV,ML)=DENNOV(INOV,IMERGE)
+               ENDDO
+               DENSTY(7,ML)=0.
+               TPROF(ML)=TNOV(IMERGE)
+               PPROF(ML)=PNOV(IMERGE)
+
+               TRATIO=273.15/TPROF(ML)
+               RELHUM(ML)=RHNOV(IMERGE)
+               WH2O(ML)=.01*RELHUM(ML)*TRATIO*                          &
+     &              EXP(18.9766-(14.9595+2.43882*TRATIO)*TRATIO)
+               FAC=SNGL((ZM(ML)-ZM(MLOLD))/(ZM(IL)-ZM(MLOLD)))
+               WCO2(ML)=EXPINT(WCO2(MLOLD),WCO2(IL),FAC)
+               WO3(ML)=EXPINT(WO3(MLOLD),WO3(IL),FAC)
+               WN2O(ML)=EXPINT(WN2O(MLOLD),WN2O(IL),FAC)
+               WCO(ML)=EXPINT(WCO(MLOLD),WCO(IL),FAC)
+               WCH4(ML)=EXPINT(WCH4(MLOLD),WCH4(IL),FAC)
+               WO2(ML)=EXPINT(WO2(MLOLD),WO2(IL),FAC)
+               WHNO3(ML)=EXPINT(WHNO3(MLOLD),WHNO3(IL),FAC)
+               WNO(ML)=EXPINT(WNO(MLOLD),WNO(IL),FAC)
+               WSO2(ML)=EXPINT(WSO2(MLOLD),WSO2(IL),FAC)
+               WNO2(ML)=EXPINT(WNO2(MLOLD),WNO2(IL),FAC)
+               WNH3(ML)=EXPINT(WNH3(MLOLD),WNH3(IL),FAC)
+               DO I=1,NMOLX
+                  WMOLXT(I,ML)=                                         &
+     &                 EXPINT(WMOLXT(I,MLOLD),WMOLXT(I,IL),FAC)
+               ENDDO
+               DO I=1,NMOLY
+                  WMOLYT(I,ML)=                                         &
+     &                 EXPINT(WMOLYT(I,MLOLD),WMOLYT(I,IL),FAC)
+               ENDDO
+               DENSTY(12,ML)=                                           &
+     &              EXPINT(DENSTY(12,MLOLD),DENSTY(12,IL),FAC)
+               DENSTY(13,ML)=                                           &
+     &              EXPINT(DENSTY(13,MLOLD),DENSTY(13,IL),FAC)
+               DENSTY(14,ML)=                                           &
+     &              EXPINT(DENSTY(14,MLOLD),DENSTY(14,IL),FAC)
+               DENSTY(15,ML)=                                           &
+     &              EXPINT(DENSTY(15,MLOLD),DENSTY(15,IL),FAC)
+               DENSTY(16,ML)=                                           &
+     &              EXPINT(DENSTY(16,MLOLD),DENSTY(16,IL),FAC)
+            ELSE
+
+!              NO MORE SPACE IN ARRAYS FOR AN ADDITIONAL LAYER
+               WRITE(IPR,'(/3A,/14X,A,2(A,I4))')' FATAL ERROR: ',       &
+     &              ' FILE "PARAMS.h" PARAMETER "LAYDIM" MUST',         &
+     &              ' BE INCREASED.',' IT SUFFICES TO INCREASE',        &
+     &              ' LAYDIM FROM',LAYDIM,' TO',LAYDIM+NLNOV-IMERGE+1
+               IF(LJMASS)CALL WRTBUF(FATAL)
+               STOP
+            ENDIF
+
+!           EXIT LOOP IF ALL NOVAM LEVELS HAVE BEEN INTEGRATED.
+            IF(IMERGE.GE.NLNOV)GOTO 20
+
+!           INCREMENT NOVAM LEVEL INDEX AND START AGAIN
+            IMERGE=IMERGE+1
+            GOTO 10
+         ENDIF
+
+!        LINEARLY INTERPOLATE WATER PARTICLE DENSITIES
+         IF(.NOT.LSET)THEN
+             FAC=SNGL((ZM(IL)-ZM(ML))/(ALTNOV(IMERGE)-ZM(ML)))
+             DO INOV=1,NNOV
+                 DENSTY(67+INOV,IL)=DENNOV(INOV,IMERGE)
+             ENDDO
+             DENSTY(7,IL)=0.
+             RELHUM(IL)=RELHUM(ML)+FAC*(RHNOV(IMERGE)-RELHUM(ML))
+             TPROF(IL)=TPROF(ML)+FAC*(TNOV(IMERGE)-TPROF(ML))
+             TRATIO=273.15/TPROF(IL)
+             WH2O(IL)=.01*RELHUM(IL)*TRATIO*                            &
+     &         EXP(18.9766-(14.9595+2.43882*TRATIO)*TRATIO)
+         ENDIF
+
+!        TRANSLATE LEVEL DATA TO NEW LEVEL INDEX.
+         ML=ML+1
+         ZM(ML)=ZM(IL)
+         DENSTY(66,ML)=DENSTY(66,IL)
+         DENSTY(67,ML)=DENSTY(67,IL)
+         DENSTY(3,ML)=DENSTY(3,IL)
+         PPROF(ML)=PPROF(IL)
+         TPROF(ML)=TPROF(IL)
+         RELHUM(ML)=RELHUM(IL)
+         WH2O(ML)=WH2O(IL)
+         WCO2(ML)=WCO2(IL)
+         WO3(ML)=WO3(IL)
+         WN2O(ML)=WN2O(IL)
+         WCO(ML)=WCO(IL)
+         WCH4(ML)=WCH4(IL)
+         WO2(ML)=WO2(IL)
+         WHNO3(ML)=WHNO3(IL)
+         WNO(ML)=WNO(IL)
+         WSO2(ML)=WSO2(IL)
+         WNO2(ML)=WNO2(IL)
+         WNH3(ML)=WNH3(IL)
+         DO I=1,NMOLX
+            WMOLXT(I,ML)=WMOLXT(I,IL)
+         ENDDO
+         DO I=1,NMOLY
+            WMOLYT(I,ML)=WMOLYT(I,IL)
+         ENDDO
+
+         DENSTY(68,ML)=DENSTY(68,IL)
+         DENSTY(69,ML)=DENSTY(69,IL)
+         DENSTY(70,ML)=DENSTY(70,IL)
+         DENSTY(71,ML)=DENSTY(71,IL)
+         DENSTY(72,ML)=DENSTY(72,IL)
+         DENSTY(73,ML)=DENSTY(73,IL)
+         DENSTY(74,ML)=DENSTY(74,IL)
+         DENSTY(75,ML)=DENSTY(75,IL)
+         DENSTY(76,ML)=DENSTY(76,IL)
+         DENSTY(77,ML)=DENSTY(77,IL)
+
+         DENSTY(7,ML)=0.
+         DENSTY(12,ML)=DENSTY(12,IL)
+         DENSTY(13,ML)=DENSTY(13,IL)
+         DENSTY(14,ML)=DENSTY(14,IL)
+         DENSTY(15,ML)=DENSTY(15,IL)
+         DENSTY(16,ML)=DENSTY(16,IL)
+      ENDDO
+   20 CONTINUE
+
+!     TRANSLATE REMAINING LEVEL DATA TO NEW LEVEL INDEX
+      NEWLEV=IL
+      DO IL=NEWLEV,LAYDIM
+         ML=ML+1
+         ZM(ML)=ZM(IL)
+         DENSTY(66,ML)=DENSTY(66,IL)
+         DENSTY(67,ML)=DENSTY(67,IL)
+         DENSTY(3,ML)=DENSTY(3,IL)
+         PPROF(ML)=PPROF(IL)
+         TPROF(ML)=TPROF(IL)
+         RELHUM(ML)=RELHUM(IL)
+         WH2O(ML)=WH2O(IL)
+         WCO2(ML)=WCO2(IL)
+         WO3(ML)=WO3(IL)
+         WN2O(ML)=WN2O(IL)
+         WCO(ML)=WCO(IL)
+         WCH4(ML)=WCH4(IL)
+         WO2(ML)=WO2(IL)
+         WHNO3(ML)=WHNO3(IL)
+         WNO(ML)=WNO(IL)
+         WSO2(ML)=WSO2(IL)
+         WNO2(ML)=WNO2(IL)
+         WNH3(ML)=WNH3(IL)
+         DO I=1,NMOLX
+            WMOLXT(I,ML)=WMOLXT(I,IL)
+         ENDDO
+         DO I=1,NMOLY
+            WMOLYT(I,ML)=WMOLYT(I,IL)
+         ENDDO
+         DENSTY(68,ML)=DENSTY(68,IL)
+         DENSTY(69,ML)=DENSTY(69,IL)
+         DENSTY(70,ML)=DENSTY(70,IL)
+         DENSTY(71,ML)=DENSTY(71,IL)
+         DENSTY(72,ML)=DENSTY(72,IL)
+         DENSTY(73,ML)=DENSTY(73,IL)
+         DENSTY(74,ML)=DENSTY(74,IL)
+         DENSTY(75,ML)=DENSTY(75,IL)
+         DENSTY(76,ML)=DENSTY(76,IL)
+         DENSTY(77,ML)=DENSTY(77,IL)
+         DENSTY(7,ML)=DENSTY(7,IL)
+         DENSTY(12,ML)=DENSTY(12,IL)
+         DENSTY(13,ML)=DENSTY(13,IL)
+         DENSTY(14,ML)=DENSTY(14,IL)
+         DENSTY(15,ML)=DENSTY(15,IL)
+         DENSTY(16,ML)=DENSTY(16,IL)
+      ENDDO
+
+!     MAKE THE LOWEST NOVAM LAYER THE BOTTOM; THAT IS EQUAL TO ZM(1)
+      DO IL=1,ML
+         IF(ABS(ALTNOV(1)-ZM(IL)).LE.ZTOL)THEN
+            IF(IL.EQ.1)RETURN
+            GOTO 30
+         ENDIF
+      ENDDO
+   30 CONTINUE
+      DO I=IL, ML
+         J=I-IL+1
+         ZM(J)=ZM(I)
+         DENSTY(66,J)=DENSTY(66,I)
+         DENSTY(67,J)=DENSTY(67,I)
+         DENSTY(3,J)=DENSTY(3,I)
+         PPROF(J)=PPROF(I)
+         TPROF(J)=TPROF(I)
+         RELHUM(J)=RELHUM(I)
+         WH2O(J)=WH2O(I)
+         WCO2(J)=WCO2(I)
+         WO3(J)=WO3(I)
+         WN2O(J)=WN2O(I)
+         WCO(J)=WCO(I)
+         WCH4(J)=WCH4(I)
+         WO2(J)=WO2(I)
+         WHNO3(J)=WHNO3(I)
+         WNO(J)=WNO(I)
+         WSO2(J)=WSO2(I)
+         WNO2(J)=WNO2(I)
+         WNH3(J)=WNH3(I)
+         DO II=1,NMOLX
+            WMOLXT(II,J)=WMOLXT(II,I)
+         ENDDO
+         DO II=1,NMOLY
+            WMOLYT(II,J)=WMOLYT(II,I)
+         ENDDO
+         DENSTY(68,J)=DENSTY(68,I)
+         DENSTY(69,J)=DENSTY(69,I)
+         DENSTY(70,J)=DENSTY(70,I)
+         DENSTY(71,J)=DENSTY(71,I)
+         DENSTY(72,J)=DENSTY(72,I)
+         DENSTY(73,J)=DENSTY(73,I)
+         DENSTY(74,J)=DENSTY(74,I)
+         DENSTY(75,J)=DENSTY(75,I)
+         DENSTY(76,J)=DENSTY(76,I)
+         DENSTY(77,J)=DENSTY(77,I)
+         DENSTY(7,J)=DENSTY(7,I)
+         DENSTY(12,J)=DENSTY(12,I)
+         DENSTY(13,J)=DENSTY(13,I)
+         DENSTY(14,J)=DENSTY(14,I)
+         DENSTY(15,J)=DENSTY(15,I)
+         DENSTY(16,J)=DENSTY(16,I)
+      ENDDO
+      ML=ML-IL+1
+      RETURN
+      END

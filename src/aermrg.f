@@ -1,0 +1,203 @@
+      SUBROUTINE AERMRG(NAERNU,ZMNU,AERNU,ML,LAER1,LAER2,LAER3,LAER4)
+      IMPLICIT NONE
+
+!     PARAMETERS:
+      INCLUDE 'PARAMS.h'
+
+!     INPUT ARGUMENTS:
+      INTEGER NAERNU,ML
+      REAL AERNU(LAYDIM)
+      DOUBLE PRECISION ZMNU(LAYDIM)
+      LOGICAL LAER1,LAER2,LAER3,LAER4
+
+!     COMMONS:
+      INCLUDE 'YPROP.h'
+      INCLUDE 'BASE.h'
+
+!     /MPROF/
+!       ZM       PROFILE LEVEL ALTITUDES [KM].
+!       PM       PROFILE LEVEL PRESSURES [MBAR].
+!       TM       PROFILE LEVEL TEMPERATURES [K].
+!       RFNDX    PROFILE LEVEL REFRACTIVITIES.
+!       LRHSET   FLAG, .TRUE. IF RELATIVE HUMIDITY IS NOT TO BE SCALED.
+      DOUBLE PRECISION ZM
+      REAL PM,TM,RFNDX
+      LOGICAL LRHSET
+      COMMON/MPROF/ZM(LAYDIM),PM(LAYDIM),TM(LAYDIM),                    &
+     &  RFNDX(LAYDIM),LRHSET(LAYDIM)
+
+!     /DEN/
+!       DENSTY   PROFILE LEVEL DENSITIES [ATM CM / KM FOR MOST SPECIES].
+      REAL DENSTY
+      COMMON/DEN/DENSTY(0:MEXTXY,1:LAYDIM)
+
+!     /M_PTWO/
+!       PPROF    PRESSURE PROFILE [MB].
+!       TPROF    TEMPERATURE PROFILE [K].
+!       WH2O     H2O VOLUME MIXING RATIO PROFILE [PPMV].
+!       WO3      O3 VOLUME MIXING RATIO PROFILE [PPMV].
+      REAL PPROF,TPROF,WH2O,WO3
+      COMMON/M_PTWO/PPROF(LAYDIM),TPROF(LAYDIM),WH2O(LAYDIM),WO3(LAYDIM)
+
+!     /M_UMIX/
+!       WCO2     CO2 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WN2O     N2O VOLUME MIXING RATIO PROFILE [PPMV].
+!       WCO      CO VOLUME MIXING RATIO PROFILE [PPMV].
+!       WCH4     CH4 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WO2      O2 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WNO      NO VOLUME MIXING RATIO PROFILE [PPMV].
+!       WSO2     SO2 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WNO2     NO2 VOLUME MIXING RATIO PROFILE [PPMV].
+!       WHNO3    HNO3 VOLUME MIXING RATIO PROFILE [PPMV].
+      REAL WCO2,WN2O,WCO,WCH4,WO2,WNO,WSO2,WNO2,WNH3,WHNO3
+      COMMON/M_UMIX/WCO2(LAYDIM),WN2O(LAYDIM),WCO(LAYDIM),              &
+     &  WCH4(LAYDIM),WO2(LAYDIM),WNO(LAYDIM),WSO2(LAYDIM),              &
+     &  WNO2(LAYDIM),WNH3(LAYDIM),WHNO3(LAYDIM)
+
+!     /MDATXY/
+!       WMOLXT   CROSS-SECTION MOLECULE DENSITY PROFILE [PPMV].
+!       WMOLYT   AUXILIARY (Y) MOLECULE DENSITY PROFILE [PPMV].
+      REAL WMOLXT,WMOLYT
+      COMMON/MDATXY/WMOLXT(NMOLX,LAYDIM),WMOLYT(MMOLY,LAYDIM)
+
+!     LOCAL VARIABLES:
+      INTEGER INDX,J,JLO,JHI,I,IX,IM1,IAER
+      REAL FAC,EXPINT,TRATIO
+
+      DO IAER=1,NAERNU
+
+!         FIND OUT WHERE ZMNU(IAER) BELONGS IN THE ZM-ARRAY
+          CALL FINDEX(ZM,ML,ZMNU(IAER),INDX,JLO)
+
+          IF(INDX.NE.-1)THEN
+
+!             MATCH OCCURRED; THAT IS, ZM(INDX)=ZMNU(IAER)
+              IF(LAER1)DENSTY(7,INDX)=AERNU(IAER)
+              IF(LAER2)DENSTY(12,INDX)=AERNU(IAER)
+              IF(LAER3)DENSTY(13,INDX)=AERNU(IAER)
+              IF(LAER4)DENSTY(14,INDX)=AERNU(IAER)
+          ELSE
+
+!             NO MATCH, INSERT NEW LAYER
+              ML=ML+1
+              J=JLO+1
+              JHI=JLO+2
+
+!             SHIFT (MOVE UP)
+              DO I=ML,JHI,-1
+                  IM1=I-1
+                  ZM(I)=ZM(IM1)
+                  PPROF(I)=PPROF(IM1)
+                  TPROF(I)=TPROF(IM1)
+                  RELHUM(I)=RELHUM(IM1)
+                  WH2O(I)=WH2O(IM1)
+                  WCO2(I)=WCO2(IM1)
+                  WO3(I)=WO3(IM1)
+                  WN2O(I)=WN2O(IM1)
+                  WCO(I)=WCO(IM1)
+                  WCH4(I)=WCH4(IM1)
+                  WO2(I)=WO2(IM1)
+                  WHNO3(I)=WHNO3(IM1)
+                  WNO(I)=WNO(IM1)
+                  WSO2(I)=WSO2(IM1)
+                  WNO2(I)=WNO2(IM1)
+                  WNH3(I)=WNH3(IM1)
+                  DO IX=1,NMOLX
+                      WMOLXT(IX,I)=WMOLXT(IX,IM1)
+                  ENDDO
+                  DO IX=1,NMOLY
+                      WMOLYT(IX,I)=WMOLYT(IX,IM1)
+                  ENDDO
+                  IF(.NOT.LAER1)DENSTY(7,I)=DENSTY(7,IM1)
+                  IF(.NOT.LAER2)DENSTY(12,I)=DENSTY(12,IM1)
+                  IF(.NOT.LAER3)DENSTY(13,I)=DENSTY(13,IM1)
+                  IF(.NOT.LAER4)DENSTY(14,I)=DENSTY(14,IM1)
+                  DENSTY(16,I)=DENSTY(16,IM1)
+              ENDDO
+              ZM(J)=ZMNU(IAER)
+              IF(LAER1)DENSTY(7,J)=AERNU(IAER)
+              IF(LAER2)DENSTY(12,J)=AERNU(IAER)
+              IF(LAER3)DENSTY(13,J)=AERNU(IAER)
+              IF(LAER4)DENSTY(14,J)=AERNU(IAER)
+
+!             ASSIGN VALUES AT NEW ALTITUDE WHICH IS ZM(J)
+              FAC=SNGL((ZM(J)-ZM(JHI))/(ZM(JLO)-ZM(JHI)))
+              PPROF(J)=EXPINT(PPROF(JHI),PPROF(JLO),FAC)
+              TPROF(J)=(TPROF(JLO)-TPROF(JHI))*FAC+TPROF(JHI)
+              TRATIO=273.15/TPROF(J)
+              RELHUM(J)=EXPINT(RELHUM(JHI),RELHUM(JLO),FAC)
+              WH2O(J)=.01*RELHUM(J)*TRATIO*                             &
+     &          EXP(18.9766-(14.9595+2.43882*TRATIO)*TRATIO)
+              WCO2(J)=EXPINT(WCO2(JHI),WCO2(JLO),FAC)
+              WO3(J)=EXPINT(WO3(JHI),WO3(JLO),FAC)
+              WN2O(J)=EXPINT(WN2O(JHI),WN2O(JLO),FAC)
+              WCO(J)=EXPINT(WCO(JHI),WCO(JLO),FAC)
+              WCH4(J)=EXPINT(WCH4(JHI),WCH4(JLO),FAC)
+              WO2(J)=EXPINT(WO2(JHI),WO2(JLO),FAC)
+              WHNO3(J)=EXPINT(WHNO3(JHI),WHNO3(JLO),FAC)
+              WNO(J)=EXPINT(WNO(JHI),WNO(JLO),FAC)
+              WSO2(J)=EXPINT(WSO2(JHI),WSO2(JLO),FAC)
+              WNO2(J)=EXPINT(WNO2(JHI),WNO2(JLO),FAC)
+              WNH3(J)=EXPINT(WNH3(JHI),WNH3(JLO),FAC)
+              DO IX=1,NMOLX
+                  WMOLXT(IX,J)=EXPINT(WMOLXT(IX,JHI),WMOLXT(IX,JLO),FAC)
+              ENDDO
+              DO IX=1,NMOLY
+                  WMOLYT(IX,J)=EXPINT(WMOLYT(IX,JHI),WMOLYT(IX,JLO),FAC)
+              ENDDO
+              IF(.NOT.LAER1)                                            &
+     &          DENSTY(7,J)=EXPINT(DENSTY(7,JHI),DENSTY(7,JLO),FAC)
+              IF(.NOT.LAER2)                                            &
+     &          DENSTY(12,J)=EXPINT(DENSTY(12,JHI),DENSTY(12,JLO),FAC)
+              IF(.NOT.LAER3)                                            &
+     &          DENSTY(13,J)=EXPINT(DENSTY(13,JHI),DENSTY(13,JLO),FAC)
+              IF(.NOT.LAER4)                                            &
+     &          DENSTY(14,J)=EXPINT(DENSTY(14,JHI),DENSTY(14,JLO),FAC)
+              DENSTY(16,J)=EXPINT(DENSTY(16,JHI),DENSTY(16,JLO),FAC)
+          ENDIF
+      ENDDO
+      RETURN
+      END
+
+      SUBROUTINE FINDEX(XA,N,X,INDX,JLO)
+
+!     THIS ROUTINE FIRST CALLS HUNT - CALL HUNT(XA,N,X,JLO,JLNEXT).
+!     HUNT DOES THIS:
+!     XA(1), XA(2), XA(3), ..., XA(N) ARE THE MONOTONIC GRID PTS.
+!     RETURNS JLO=J, IF X IS BETWEEN XA(J) & XA(J+1).
+!     IF X=XA(J), RETURNS JLO=J-1.
+!     IF OUT OF RANGE, RETURNS 0 OR N.
+      IMPLICIT NONE
+
+!     PARAMETERS:
+      INCLUDE 'PARAMS.h'
+
+!     INPUT ARGUMENTS:
+      INTEGER N
+      DOUBLE PRECISION XA(N),X
+
+!     OUTPUT ARGUMENTS:
+      INTEGER JLO,INDX
+
+!     LOCAL VARIABLES:
+      INTEGER JLPREV,JLNEXT
+
+!     WE NEED TO KNOW FOR WHICH J, XA(J)=X WITHIN TOLERANCE, ZTOL.
+!     INDX IS RETURNED BY SETTING IT EQUAL TO J.
+!     IF THERE IS NO EXACT MATCH -1 IS RETURNED.
+      CALL DPHUNT(XA,N,X,JLO,JLNEXT)
+
+!     NOTE THAT JLO IS BETWEEN 0 TO N, BOTH INCLUSIVE.
+      INDX=-1
+      JLPREV=JLO-1
+      IF(JLNEXT.LE.N)THEN
+          IF(ABS(XA(JLNEXT)-X).LE.ZTOL)INDX=JLNEXT
+      ENDIF
+      IF(JLPREV.GT.0)THEN
+          IF(ABS(XA(JLPREV)-X).LE.ZTOL)INDX=JLPREV
+      ENDIF
+      IF(JLO.GT.0)THEN
+          IF(ABS(XA(JLO)-X).LE.ZTOL)INDX=JLO
+      ENDIF
+      RETURN
+      END

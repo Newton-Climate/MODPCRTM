@@ -1,0 +1,1499 @@
+      SUBROUTINE DGRD(DEGALL,I_SCAN,FWSCAN,LSKIP,LNFLRT,FLRT,ILOS,NLOS)
+
+!     DGRD IS THE DRIVER FOR SPECTRAL SLIT FUNCTION POST-PROCESSING.  A
+!     PRIOR CALL TO CHKRES CHECKS THE MODTRAN INPUTS RELEVANT TO DGRD.
+      IMPLICIT NONE
+
+!     PARAMETERS:
+      INCLUDE 'PARAMS.h'
+
+!     INPUT ARGUMENTS:
+!       I_SCAN   SCANNING FUNCTION NUMERICAL LABEL.
+!                 (1=TRIANG,2=RECTAN,3=GAUSS,4=SINC,5=SINCSQ,6=HAMMING)
+!       FWSCAN   NUMBER OF FULL-WIDTH AT HALF-MAXIMUM (FWHM)
+!                USED TO INTEGRATE SCANNING FUNCTION
+!       DEGALL   LOGICAL FLAG, TRUE IF ALL TABLE ENTRIES ARE DEGRADED.
+!       LSKIP    TRUE IF AN OLD TAPE7.SCR IS TO BE REUSED.
+!       LNFLRT   LENGTH OF I/O FILE ROOT NAME, 0 IF FILE ROOT NOT USED.
+!       FLRT     ROOT NAME FOR ALL I/O FILES.
+!       ILOS     INDEX FOR CURRENT OF LINE-OF-SIGHT PATH.
+!       NLOS     NUMBER OF LINE-OF-SIGHT PATHS.
+      INTEGER I_SCAN,LNFLRT,ILOS,NLOS
+      REAL FWSCAN
+      LOGICAL DEGALL,LSKIP
+      CHARACTER FLRT*(NAMLEN-4)
+
+!     COMMONS:
+      INCLUDE 'IFIL.h'
+
+!     /CARD1/
+!       MODEL    MODEL ATMOSPHERE INDEX.
+!       ITYPE    SLANT PATH TYPE.
+!       IEMSCT   RADIATIVE TRANSFER MODE.
+!                  0 FOR TRANSMITTANCE
+!                  1 FOR THERMAL EMISSION ONLY
+!                  2 FOR THERMAL EMISSION PLUS SOLAR SCATTER
+!                  3 FOR TRANSMITTED SOLAR IRRADIANCE
+!                  4 FOR SOLAR SCATTER ONLY
+!       M1       MODEL ATMOSPHERE FOR PRESSURE & TEMPERATURE PROFILES.
+!       M2       MODEL ATMOSPHERE FOR H2O PROFILE.
+!       M3       MODEL ATMOSPHERE FOR O3 PROFILE.
+!       I_RD2C   READ CARD 2C, 2C1, ... IF EQUAL 1; SKIP IF EQUAL TO 0.
+!       NOPRNT   PRINT FLAG.
+!       MODTRN   MODTRAN BAND MODEL FLAG.
+      INTEGER MODEL,ITYPE,IEMSCT,M1,M2,M3,I_RD2C,NOPRNT
+      LOGICAL MODTRN
+      COMMON/CARD1/MODEL,ITYPE,IEMSCT,M1,M2,M3,I_RD2C,NOPRNT,MODTRN
+
+!     /CARD4/
+!       IV1      LOWEST SPECTRAL FREQUENCY OUTPUT [CM-1].
+!       IV2      HIGHEST SPECTRAL FREQUENCY OUTPUT [CM-1].
+!       IDV      PRINTOUT SPECTRAL FREQUENCY STEP SIZE [CM-1].
+!       IFWHM    TRIANGULAR SLIT FULL-WIDTH-HALF-MAXIMUM [CM-1].
+!       VBAND    CURRENT COMPUTATION BAND FREQUENCY [CM-1].
+!                (EQUALS BAND CENTER FOR 1, 5 & 15 CM-1 BAND MODELS;
+!                EQUALS THE MINIMUM BAND VALUE FOR 0.1 CM-1 BAND MODEL)
+!       IBINPT   BIN NUMBER OF CURRENT SPECTRAL POINT.
+!                (CENTER FREQUENCY = IBINPT * BNDWID + OSHIFT).
+!       IBINLO   BIN NUMBER OF (PADDED) SPECTRAL RANGE LOWER BOUND.
+!       IBINHI   BIN NUMBER OF (PADDED) SPECTRAL RANGE UPPER BOUND.
+!       IBINMN   BIN NUMBER OF MINIMUM COMPUTATION SPECTRAL POINT.
+!       IBINMX   BIN NUMBER OF MAXIMUM COMPUTATION SPECTRAL POINT.
+!       IBINDL   BIN NUMBER INCREMENT FOR SPECTRAL PRINTOUT.
+!       IBINRS   BIN NUMBER INCREMENT EQUAL TO SPECTRAL RESOLUTION.
+!       IBINOS   BIN NUMBER OFFSET BETWEEN CURRENT & OUTPUT SPC POINTS.
+!       IBINWR   BIN NUMBER OF NEXT SPECTRAL DATA WRITE.
+!       MBINPT   BIN NUMBER MAXIMUM FOR CURRENT BAND MODEL RESOLUTION.
+!       IDBIN5   SPECTRAL BIN NUMBER STEP SIZE FOR 5 CM-1 GRID.
+!       ISTEP5   INCREMENT FOR RETRIEVING 5 CM-1 RESOLUTION DATA [CM-1].
+!       NSPCDT   NUMBER OF OUTPUT SPECTRAL DATA POINTS.
+      DOUBLE PRECISION IDV
+      REAL IV1,IV2,IFWHM,VBAND
+      INTEGER IBINPT,IBINLO,IBINHI,IBINMN,IBINMX,IBINDL,                &
+     &  IBINRS,IBINOS,IBINWR,MBINPT,IDBIN5,ISTEP5,NSPCDT
+      COMMON/CARD4/IDV,IV1,IV2,IFWHM,VBAND,IBINPT,IBINLO,IBINHI,IBINMN, &
+     &  IBINMX,IBINDL,IBINRS,IBINOS,IBINWR,MBINPT,IDBIN5,ISTEP5,NSPCDT
+
+!     /CSCAN/
+!       CHUNIT   UNIT FLAG ('W'=WAVENUMBERS;'M'=MICRONS;'N'=NANOMETERS).
+!       RELABS   SPECTRAL RESOLUTION FLAG('A'=ABSOLUTE;'R'=RELATIVE[%]).
+!       LNFEED   LINE FEED FLAG FOR .FLX FILE ('T' FOR 80 CHARACTER
+!                  LINES, 'F' FOR LONG LINES, ' ' FOR NO .FLX FILE).
+      CHARACTER CHUNIT*1,RELABS*1,LNFEED*1
+      COMMON/CSCAN/CHUNIT,RELABS,LNFEED
+
+!     /SCAN/
+!       V1       LOWER BOUND ON SPECTRAL RANGE [CHUNIT DEFINES UNIT].
+!       V2       UPPER BOUND ON SPECTRAL RANGE [CHUNIT DEFINES UNIT].
+!       DV       SPECTRAL STEP SIZE FOR OUTPUT [CHUNIT DEFINES UNIT].
+!       FWHM     FULL-WIDTH-AT-HALF-MAXIMUM [CHUNIT DEFINES UNIT].
+!       FWHMSQ   TRIANGULAR SLIT NORMALIZATION FACTOR
+!                (EQUALS FWHM SQUARED) [CHUNIT DEFINES UNIT].
+!       VOUT     CURRENT SPECTRAL OUTPUT [CHUNIT DEFINES UNIT].
+!       M2_FAC   FACTOR IN 2ND MOMENT DIFFERENCE INTEGRAL [CHUNIT UNIT].
+      DOUBLE PRECISION V1,V2,DV,VOUT,FWHMSQ
+      REAL FWHM,M2_FAC
+      COMMON/SCANFN/V1,V2,DV,VOUT,FWHMSQ,FWHM,M2_FAC
+
+!     /CFLAGS/
+!       YFLAG    Y COORDINATE FLAG FOR PLOT.DAT FILE
+!                  = "T" FOR TRANSMITTANCE
+!                  = "R" FOR RADIANCE (IRRADIANCE FOR IEMSCT=3)
+!                  = "N" FOR NO PLOT.DAT OUTPUT
+!       XFLAG    X COORDINATE FLAG FOR PLOT.DAT FILE
+!                  = "W" FOR FREQUENCY IN WAVENUMBERS (CM-1) AND
+!                        RADIANCE IN W SR-1 CM-2 / CM-1
+!                  = "M" FOR WAVELENGTH IN MICRONS AND
+!                        RADIANCE IN W SR-1 CM-2 / MICRON
+!                  = "N" FOR WAVELENGTH IN NANOMETERS AND
+!                        RADIANCE IN MICRO-WATTS SR-1 CM-2 / NANOMETER
+!       DLIMIT   DELIMITER CHARACTER STRING BETWEEN MODTRAN RUNS
+!       FLAGS    SCANNING FUNCTION FLAGS.
+      CHARACTER YFLAG*1,XFLAG*1,DLIMIT*8,FLAGS*7
+      COMMON/CFLAGS/YFLAG,XFLAG,DLIMIT,FLAGS
+
+!     /DISRT/
+!       UMU      MONOTONICALLY INCREASING LIST OF DISTINCT USER-PATH
+!                COSINE POLAR ANGLES.
+!       PHI      MONOTONICALLY INCREASING LIST OF DISTINCT RELATIVE
+!                SOLAR AZIMUTH ANGLES [0 TO 180 DEG].
+!       NSTR     NUMBER OF DISCRETE ORDINATE STREAMS.
+!       NAZ      NUMBER OF DISORT AZIMUTH COMPONENTS.
+!       N2GAUS   ORDER OF DOUBLE-GAUSS QUADRATURES.
+!       NUMU     NUMBER OF DISTINCT USER LINE-OF-SIGHT POLAR ANGLES.
+!       MAPUMU   MAPPING FROM LINE-OF-SIGHT INDEX TO UMU ARRAY ENTRY.
+!       NPHI     NUMBER OF DISTINCT RELATIVE SOLAR AZIMUTH ANGLES.
+!       MAPPHI   MAPPING FROM LINE-OF-SIGHT INDEX TO PHI ARRAY ENTRY.
+!       DIS      LOGICAL FLAG, TRUE FOR DISORT MULTIPLE SCATTERING.
+!       DISAZM   LOGICAL FLAG, TRUE FOR DISORT WITH AZIMUTH DEPENDENCE.
+!       DISALB   LOGICAL FLAG, TRUE FOR DISORT SPHERICAL ALBEDO OPTION.
+!       LDISCL   LOGICAL FLAG, TRUE FOR ISAACS SCALED TO DISORT.
+      REAL UMU,PHI
+      INTEGER NSTR,NAZ,N2GAUS,NUMU,MAPUMU,NPHI,MAPPHI
+      LOGICAL DIS,DISAZM,DISALB,LDISCL
+      COMMON/DISRT/UMU(MXUMU),PHI(MAXPHI),NSTR,NAZ,N2GAUS,NUMU,         &
+     &  MAPUMU(MLOS),NPHI,MAPPHI(MLOS),DIS,DISAZM,DISALB,LDISCL
+      SAVE /DISRT/
+
+!     LOCAL VARIABLES:
+!       HEADER   TAPE7 HEADER INFORMATION.
+!       FRMT     OUTPUT FORMAT FOR SCANNED TAPE7 FILE SPECTRAL DATA.
+!       ISEP     SEPARATION FLAG BETWEEN RUNS (=-9999).
+!       JEMSCT   HEADER "IEMSCT" INTEGER.
+!       JNMX     HEADER "NMOLX" INTEGER.
+!       JNMY     HEADER "NMOLY" INTEGER.
+!       JMULT    HEADER "IMULT" INTEGER.
+!       LDIS     HEADER "DIS" LOGICAL FLAG.
+!       LOPEN    .TRUE. IF FILE OPEN.
+!       ISPCDT   COUNTER FOR TAPE7.SCR SPECTRAL POINTS.
+!       NDDGRD   NUMBER OF DEGRADED DATA SPECTRAL POINTS.
+!       IDDGRD   COUNTER FOR DEGRADED DATA SPECTRAL POINTS.
+!       NCOL     INDEX OF LAST COLUMN IN TAPE7.SCR FILE.
+!       ICOL     COUNTER FOR TAPE7.SCR COLUMNS.
+!       ICOLMN   INDEX OF FIRST (IR)RADIANCE COLUMN WRITTEN TO *.7SC.
+!       ICOLMX   INDEX OF LAST (IR)RADIANCE COLUMN WRITTEN TO *.7SC.
+!       ICOLEM   INDEX OF DIRECTIONAL EMISSIVITY COLUMN.
+!       KCOL     INDEX OF TOTAL PATH (IR)RADIANCE COLUMN.
+!       IMOL     MOLECULAR INDEX.
+!       JLOS     LINE-OF-SIGHT PATH LOOP INDEX.
+!       WNMIN    REQUESTED SPECTRAL RANGE MINIMUM FREQUENCY [CM-1].
+!       WNMAX    REQUESTED SPECTRAL RANGE MAXIMUM FREQUENCY [CM-1].
+!       SUMUNC   UNCONVOLVED INTEGRATED SPECTRUM [IEMSCT DEFINES UNIT].
+!       SUMCON   CONVOLVED INTEGRATED RADIANCE [W CM-2 SR-1].
+!       LNTRAN   NEGATIVE LOGARITHM OF COMBINED SPECIES TRANSMITANCE.
+!       VMIN     LOWER BOUND ON SPECTRAL RANGE [CHUNIT DEFINES UNIT].
+!       VMAX     UPPER BOUND ON SPECTRAL RANGE [CHUNIT DEFINES UNIT].
+!       WDGRD    SPECTRAL GRID OF DEGRADED DATA.
+!       DDGRD    DEGRADED SPECTRAL DATA.
+!       SPC0     SPECTRAL FREQUENCY OFFSET [CM-1].
+!       SPCGRD   TAPE7.SCR SPECTRAL GRID [CM-1 BEFORE CALL TO CNVRTW;
+!                           CHUNIT DEFINES UNIT AFTER CALL TO CNVRTW].
+!       SPCDAT   TAPE7.SCR SPECTRAL DATA TABLE.
+!       RDUMIN   REAL DUMMY INPUT.
+      CHARACTER HEADER*11,FRMT*77
+      INTEGER ISEP,JEMSCT,JNMX,JNMY,JMULT,ISPCDT,NDDGRD,IDDGRD,NCOL,    &
+     &  ICOL,ICOLMN,ICOLMX,ICOLEM,KCOL,IMOL,ITEST,JLOS
+      LOGICAL LDIS,LOPEN
+      DOUBLE PRECISION WDGRD(MDDGRD),VMIN,VMAX,SUMCON
+      REAL SUMUNC,LNTRAN,SPCMX,DDGRD(MDDGRD),SPC0,WNMIN,WNMAX,          &
+     &  SPCGRD(0:MSPCDT),SPCDAT(MSPCDT,21+NMOLX+MMOLY),RDUMIN
+
+!     FUNCTIONS:
+!       CNVRTW   RETURNS INTEGRATED RAW (RECTANGULAR SLIT) SPECTRUM.
+!       BNDPAS   RETURNS INTEGRATED CONVOLVED SPECTRUM.
+!       BT_wn    BRIGHTNESS TEMPERATURE FOR [W CM-1 SR-1] RADIANCE.
+!       BT_uM    BRIGHTNESS TEMPERATURE FOR [W CM-2 SR-1 / uM] RADIANCE.
+!       BT_NM    BRIGHTNESS TEMPERATURE FOR [W CM-2 SR-1 / NM] RADIANCE.
+      REAL CNVRTW,BT_WN,BT_UM,BT_NM
+      DOUBLE PRECISION BNDPAS
+
+!     DATA:
+!       CSLIT    CHARACTER DESCRIPTOR OF SLIT FUNCTION TYPE.
+      CHARACTER*12 CSLIT(7)
+      DATA CSLIT/      ' TRIANGULAR ','RECTANGULAR ','  GAUSSIAN  ',    &
+     &  '    SINC    ','  SINC**2   ','  HAMMING   ','USER-DEFINED'/
+
+!     CHECK ARRAY SIZE:
+      IF(NSPCDT.GT.MSPCDT)THEN
+          WRITE(IPR,'(/A,2(I8,A),/16X,A)')' Error in DGRD:  The'//      &
+     &      ' number of spectral points required for the convolution (',&
+     &      NSPCDT,') exceeds the maximum (MSPCDT =',MSPCDT,').',       &
+     &      ' Decrease the spectral range, select a coarser'//          &
+     &      ' band model, or increase parameter MSPCDT.'
+          IF(LJMASS)CALL WRTBUF(FATAL)
+          STOP 'Error in DGRD:  Too many spectral output points'
+      ENDIF
+      ITEST=INT((V2-V1)/DV)+1
+      IF(ITEST.GT.MDDGRD)THEN
+          WRITE(IPR,'(/A,2(I8,A),/16X,A)')'Error in DGRD:  The'//       &
+     &     ' number of spectral convolved output points (',             &
+     &     ITEST,') exceeds the maximum (MDDGRD =',MDDGRD,').',         &
+     &     ' Decrease the spectral range, increase the spectral'//      &
+     &     ' output step size (DV), or increase parameter MDDGRD.'
+         IF(LJMASS)CALL WRTBUF(FATAL)
+         STOP 'Error in DGRD:  Spectral resolution is too fine.'
+      ENDIF
+
+!     PREPARE TO READ SPECTRAL DATA:
+      VMIN=MIN(V1,V2)
+      VMAX=MAX(V1,V2)
+
+!     IF LSKIP IS .TRUE., TAPE7.SCR IS TO BE REUSED.  IN THIS CASE,
+!     VMIN AND VMAX OBTAINED FROM V1 AND V2 MAY NOT CORRESPOND TO
+!     DATA IN TAPE7.SCR.  THUS, THE LIMITS OF "DEGRADABLE" SPECTRAL
+!     FREQUENCY MAY NEED TO BE ADJUSTED.
+      IF(LSKIP)                                                         &
+     &  CALL ADJUST(VMIN,VMAX,DV,IV1,IV2,FWSCAN,FWHM,RELABS,CHUNIT)
+
+!     WRITE SLIT FUNCTION INFORMATION TO TAPE6 (UNIT NUMBER IPR):
+      WRITE(IPR,'(/3A)')                                                &
+     &  ' Spectrum will be convolved using a ',CSLIT(I_SCAN),' slit.'
+      WRITE(IPR,'(A)')' CONVOLVED SPECTRA ARE IN FILES'//               &
+     &  ' PLTOUT.SCN (OR *.PSC) AND TAPE7.SCN (OR *.7SC)'
+      IF(CHUNIT.EQ.'W')THEN
+
+!         WAVENUMBERS:
+          FRMT(1:14)='((0P,F12.2,1X,'
+          WNMIN=REAL(VMIN)
+          WNMAX=REAL(VMAX)
+          WRITE(IPR,'(A,2(F9.2,A))')                                    &
+     &      ' BANDPASS FOR CONVOLVING =',VMIN,' TO',VMAX,' CM-1.'
+      ELSEIF(CHUNIT.EQ.'M')THEN
+
+!         MICRONS:
+          FRMT(1:14)='((0P,F12.6,1X,'
+          WNMIN=1.E4/REAL(VMAX)
+          WNMAX=1.E4/REAL(VMIN)
+          WRITE(IPR,'(A,2(F12.6,A),2(F9.2,A))')' BANDPASS =',VMIN,' TO',&
+     &      VMAX,' MICRON, EQUIVALENTLY,',WNMAX,' TO',WNMIN,' CM-1.'
+      ELSEIF(CHUNIT.EQ.'N')THEN
+
+!         NANOMETERS:
+          FRMT(1:14)='((0P,F12.3,1X,'
+          WNMIN=1.E7/REAL(VMAX)
+          WNMAX=1.E7/REAL(VMIN)
+          WRITE(IPR,'(A,2(F12.3,A),2(F9.2,A))')' BANDPASS =',VMIN,' TO',&
+     &      VMAX,' NANOMETER, EQUIVALENTLY,',WNMAX,' TO',WNMIN,' CM-1.'
+      ENDIF
+
+!     READ THE HEADER IN JPUSCR.
+      REWIND(JPUSCR)
+   10 CONTINUE
+      READ(JPUSCR,END=30)ISEP
+      IF(ISEP.NE.BINSPR)GOTO 10
+      READ(JPUSCR,END=30)ISEP
+      IF(ISEP.NE.BINSPR)GOTO 10
+      HEADER(1:4)='    '
+      READ(JPUSCR,ERR=30,END=30)HEADER(1:4),JEMSCT,JNMX,JNMY,JMULT,LDIS
+      IF(JEMSCT.EQ.0)THEN
+          DO IMOL=1,JNMX+JNMY
+              READ(JPUSCR,ERR=40,END=40)HEADER(5:11)
+          ENDDO
+      ENDIF
+
+!     THE APPROACH FOR DEGRADED SPECTRAL DATA IS AS FOLLOWS:
+!     READ NUMBERS FROM JPUSCR (THE NUMBERS READ DEPEND ON IEMSCT).
+!     CONVERT UNITS FOR RADIANCE AND IRRADIANCE DATA.
+!     DEGRADE AND THEN PRINT TO TAPE7.SCN (IPUSCN)
+!     COMPUTE BANDPASS INTEGRALS OF RADIANCE AND IRRADIANCES.
+!     WRITE THESE BANDPASSES TO TAPE6.
+!     THEN GENERATE PLTOUT.SCN FILE (EQUIVALENT TO PLTOUT.SCN)
+      IF(IEMSCT.EQ.0)THEN
+
+!         SPECTRAL TRANSMITTANCE DATA:
+          IF(DEGALL)THEN
+
+!             DEGRADE ALL THE TABLE DATA:
+              DO ISPCDT=1,NSPCDT
+
+!                 READ ALL SPECTRAL TRANSMITTANCES
+                  READ(JPUSCR,END=30,ERR=30)SPCGRD(ISPCDT),             &
+     &              (SPCDAT(ISPCDT,ICOL),ICOL=1,11),LNTRAN,             &
+     &              (SPCDAT(ISPCDT,ICOL),ICOL=12,21+NMOLX+JNMY)
+              ENDDO
+              SUMUNC=CNVRTW(NSPCDT,IDV,SPCGRD,SPCDAT(1,1),WNMIN,WNMAX,  &
+     &          CHUNIT)
+              DO ICOL=1,21+NMOLX+JNMY
+                  CALL DEGRAD(NSPCDT,SPCGRD,SPCDAT(1,ICOL),VMIN,VMAX,   &
+     &              DV,FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+              ENDDO
+
+!             WRITE RESULTS:
+              FRMT(15:77)='F9.7,1X,10(F6.4,1X),F7.3,00(1X,F6.4)))'      &
+     &          //'                         '
+              WRITE(FRMT(40:41),'(I2.2)')10+NMOLX+JNMY
+              DO IDDGRD=1,NDDGRD
+                  IF(SPCDAT(IDDGRD,1).GT.0.)THEN
+                      LNTRAN=MIN(-SNGL(LOG(DBLE(SPCDAT(IDDGRD,1)))),    &
+     &                           99.9999)
+                  ELSE
+                      LNTRAN=99.9999
+                  ENDIF
+                   WRITE(IPUSCN,FMT=FRMT)WDGRD(IDDGRD),                 &
+     &              (SPCDAT(IDDGRD,ICOL),ICOL=1,11),LNTRAN,             &
+     &              (SPCDAT(IDDGRD,ICOL),ICOL=12,21+NMOLX+JNMY)
+              ENDDO
+          ELSE
+
+!             ONLY DEGRADE COMBINED SPECIES TRANSMITTANCE:
+              DO ISPCDT=1,NSPCDT
+
+!                 READ FIRST TWO COLUMNS:
+                  READ(JPUSCR,END=30,ERR=30)                            &
+     &              SPCGRD(ISPCDT),SPCDAT(ISPCDT,1)
+              ENDDO
+              SUMUNC=CNVRTW(NSPCDT,IDV,SPCGRD,SPCDAT(1,1),WNMIN,WNMAX,  &
+     &          CHUNIT)
+              CALL DEGRAD(NSPCDT,SPCGRD,SPCDAT(1,1),VMIN,VMAX,          &
+     &          DV,FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+
+!             WRITE RESULTS:
+              FRMT(15:77)='F9.7))        '                              &
+     &          //'                                                 '
+              WRITE(IPUSCN,FMT=FRMT)                                    &
+     &          (WDGRD(IDDGRD),SPCDAT(IDDGRD,1),IDDGRD=1,NDDGRD)
+          ENDIF
+          IF(NDDGRD.GT.1)THEN
+              SUMCON                                                    &
+     &          =BNDPAS(NDDGRD,WDGRD,SPCDAT(1,1),WDGRD(1),WDGRD(NDDGRD))
+              IF(CHUNIT.EQ.'W')THEN
+                  WRITE(IPR,'((A,F10.6))')' UNCONVOLVED IN-BAND'//      &
+     &              ' TRANSMITTANCE AVERAGED OVER SPECTRAL FREQUENCY: ',&
+     &              SUMUNC/(WNMAX-WNMIN),' CONVOLVED   IN-BAND'//       &
+     &              ' TRANSMITTANCE AVERAGED OVER SPECTRAL FREQUENCY: ',&
+     &              SUMCON/(WDGRD(NDDGRD)-WDGRD(1))
+              ELSE
+                  WRITE(IPR,'((A,F10.6))')' UNCONVOLVED IN-BAND'//      &
+     &              ' TRANSMITTANCE AVERAGED OVER SPECTRAL FREQUENCY: ',&
+     &              SUMUNC/(WNMAX-WNMIN),' CONVOLVED   IN-BAND'//       &
+     &              ' TRANSMITTANCE AVERAGED OVER SPECTRAL WAVELENGTH:',&
+     &              SUMCON/(WDGRD(NDDGRD)-WDGRD(1))
+              ENDIF
+          ELSE
+              IF(CHUNIT.EQ.'W')THEN
+                  WRITE(IPR,'((A,F10.6))')' UNCONVOLVED IN-BAND'//      &
+     &              ' TRANSMITTANCE AVERAGED OVER SPECTRAL FREQUENCY: ',&
+     &              SUMUNC/(WNMAX-WNMIN),' CONVOLVED   IN-BAND'//       &
+     &              ' TRANSMITTANCE AVERAGED OVER SPECTRAL FREQUENCY: ',&
+     &              SPCDAT(1,1)
+              ELSE
+                  WRITE(IPR,'((A,F10.6))')' UNCONVOLVED IN-BAND'//      &
+     &              ' TRANSMITTANCE AVERAGED OVER SPECTRAL FREQUENCY: ',&
+     &              SUMUNC/(WNMAX-WNMIN),' CONVOLVED   IN-BAND'//       &
+     &              ' TRANSMITTANCE AVERAGED OVER SPECTRAL WAVELENGTH:',&
+     &              SPCDAT(1,1)
+              ENDIF
+          ENDIF
+      ELSEIF(IEMSCT.EQ.3)THEN
+
+!         SOLAR IRRADIANCE DATA (READ IN TAPE7.SCR DATA):
+          DO ISPCDT=1,NSPCDT
+              READ(JPUSCR,END=30,ERR=30)                                &
+     &          SPCGRD(ISPCDT),(SPCDAT(ISPCDT,ICOL),ICOL=1,3)
+          ENDDO
+
+!         INTEGRATE TOTAL RADIANCE AND CONVERT UNITS:
+          SPC0=SPCGRD(1)-REAL(IDV)
+          SUMUNC                                                        &
+     &      =CNVRTW(NSPCDT,IDV,SPCGRD,SPCDAT(1,2),WNMIN,WNMAX,CHUNIT)
+          IF(CHUNIT.NE.'W')THEN
+              CALL CNVRTR(NSPCDT,SPC0,IDV,SPCDAT(1,2),CHUNIT)
+              CALL CNVRTR(NSPCDT,SPC0,IDV,SPCDAT(1,3),CHUNIT)
+          ENDIF
+
+!         PROCESS SPECTRAL TRANSMITTANCES:
+          CALL DEGRAD(NSPCDT,SPCGRD,SPCDAT(1,1),VMIN,VMAX,              &
+     &      DV,FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+
+!         PROCESS SPECTRAL IRRADIANCES:
+          CALL DEGRAD(NSPCDT,SPCGRD,SPCDAT(1,2),VMIN,VMAX,              &
+     &      DV,FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+          CALL DEGRAD(NSPCDT,SPCGRD,SPCDAT(1,3),VMIN,VMAX,              &
+     &      DV,FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+
+!         WRITE RESULTS:
+          KCOL=2
+          FRMT(15:77)='F9.7,1P,2E9.2))'                                 &
+     &      //'                                                '
+          WRITE(IPUSCN,FMT=FRMT)(WDGRD(IDDGRD),                         &
+     &      (SPCDAT(IDDGRD,ICOL),ICOL=1,3),IDDGRD=1,NDDGRD)
+          WRITE(IPR,'(A,1P,E14.5,A)')                                   &
+     &      ' UNCONVOLVED INTEGRATED IRRADIANCE:',SUMUNC,' W CM-2'
+
+!         INTEGRATE TOTAL RADIANCE (IF IN NM, CONVERT FROM microW TO W).
+          IF(NDDGRD.GT.1)THEN
+              SUMCON                                                    &
+     &          =BNDPAS(NDDGRD,WDGRD,SPCDAT(1,2),WDGRD(1),WDGRD(NDDGRD))
+              IF(CHUNIT.EQ.'N')SUMCON=1.D-6*SUMCON
+              WRITE(IPR,'(A,1P,E14.5,A)')                               &
+     &          ' CONVOLVED   INTEGRATED IRRADIANCE:',SUMCON,' W CM-2'
+          ENDIF
+      ELSE
+
+!         DEFINE NUMBER OF DATA COLUMNS AND OUTPUT FORMAT:
+          FRMT(15:77)='F9.7,1P,77X,E11.4,0P,44X,F11.3))'                &
+     &      //'                               '
+          IF(IEMSCT.EQ.1)THEN
+
+!             THERMAL EMISSION DATA:
+              IF(DIS .AND. .NOT.LDISCL)THEN
+
+!                 DISORT MULTIPLE SCATTERING:
+                  NCOL=7
+                  ICOLEM=7
+                  IF(DEGALL)FRMT(23:77)='2(E11.4,11X),2E22.4,'          &
+     &              //'0P,F26.3,F7.4,F22.3))              '
+              ELSE
+
+!                 NO DISORT MULTIPLE SCATTERING:
+                  NCOL=8
+                  ICOLEM=8
+                  IF(DEGALL)FRMT(23:77)='3E11.4,11X,2E22.4,'            &
+     &              //'0P,F26.3,F7.4,F22.3))                '
+              ENDIF
+              KCOL=NCOL-2
+          ELSE
+
+!             THERMAL AND SOLAR DATA:
+              IF(DIS .AND. .NOT.LDISCL)THEN
+
+!                 DISORT MULTIPLE SCATTERING:
+                  NCOL=13
+                  ICOLEM=12
+                  IF(DEGALL)FRMT(23:77)='E11.4,11X,6E11.4,2E9.2,'       &
+     &              //'0P,F8.3,F7.4,1P,E11.4,0P,F11.3))'
+              ELSE
+
+!                 NO DISORT MULTIPLE SCATTERING:
+                  NCOL=14
+                  ICOLEM=13
+                  IF(DEGALL)FRMT(23:77)='8E11.4,2E9.2,'                 &
+     &              //'0P,F8.3,F7.4,1P,E11.4,0P,F11.3))          '
+              ENDIF
+              KCOL=NCOL-5
+          ENDIF
+          IF(DEGALL)THEN
+
+!             PROCESS ALL COLUMNS:
+              ICOLMN=2
+              ICOLMX=NCOL
+          ELSE
+
+!             ONLY OUTPUT SPECTRAL TRANSMITTANCE AND TOTAL RADIANCE:
+              ICOLMN=KCOL
+              ICOLMX=KCOL
+          ENDIF
+
+!         READ IN TAPE7.SCR DATA:
+          DO ISPCDT=1,NSPCDT
+              DO JLOS=1,ILOS-1
+                  READ(JPUSCR,END=30,ERR=30)RDUMIN
+              ENDDO
+              READ(JPUSCR,END=30,ERR=30)SPCGRD(ISPCDT),                 &
+     &          (SPCDAT(ISPCDT,ICOL),ICOL=1,ICOLMX)
+              DO JLOS=ILOS+1,NLOS
+                  READ(JPUSCR,END=30,ERR=30)RDUMIN
+              ENDDO
+          ENDDO
+
+!         INTEGRATE TOTAL RADIANCE AND CONVERT UNIT OF SPECTRAL GRID.
+          SPC0=SPCGRD(1)-REAL(IDV)
+          SUMUNC=CNVRTW(NSPCDT,IDV,SPCGRD,SPCDAT(1,KCOL),WNMIN,WNMAX,   &
+     &      CHUNIT)
+
+!         PROCESS SPECTRAL TRANSMITTANCES:
+          CALL DEGRAD(NSPCDT,SPCGRD,SPCDAT(1,1),VMIN,VMAX,              &
+     &      DV,FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+
+!         PROCESS SPECTRAL RADIANCES:
+          IF(CHUNIT.EQ.'W')THEN
+
+!             SPECTRAL FREQUENCY IN WAVENUMBERS:
+              DO ICOL=ICOLMN,ICOLMX
+                  CALL DEGRAD(NSPCDT,SPCGRD,SPCDAT(1,ICOL),VMIN,VMAX,   &
+     &              DV,FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+              ENDDO
+              IF(RELABS.EQ.'R')THEN
+                  WRITE(IPUSCN,FMT=FRMT)(WDGRD(IDDGRD),SPCDAT(IDDGRD,1),&
+     &              (SPCDAT(IDDGRD,ICOL),ICOL=ICOLMN,ICOLMX),           &
+     &              BT_WN(SPCDAT(IDDGRD,KCOL),REAL(WDGRD(IDDGRD)),      &
+     &                                     M2_FAC),IDDGRD=1,NDDGRD)
+              ELSE
+                  WRITE(IPUSCN,FMT=FRMT)(WDGRD(IDDGRD),SPCDAT(IDDGRD,1),&
+     &              (SPCDAT(IDDGRD,ICOL),ICOL=ICOLMN,ICOLMX),           &
+     &              BT_WN(SPCDAT(IDDGRD,KCOL),REAL(WDGRD(IDDGRD)),      &
+     &              M2_FAC/REAL(WDGRD(IDDGRD)**2)),IDDGRD=1,NDDGRD)
+              ENDIF
+          ELSE
+
+!             SPECTRAL WAVELENGTH IN NANOMETERS ('N') OR MICRONS ('M'):
+              DO ICOL=ICOLMN,ICOLMX
+
+!                 SKIP UNIT CONVERSION FOR DEPTH AND DIR_EMIS:
+                  IF(ICOL.NE.ICOLEM .AND. ICOL.NE.ICOLEM-1)             &
+     &              CALL CNVRTR(NSPCDT,SPC0,IDV,SPCDAT(1,ICOL),CHUNIT)
+                  CALL DEGRAD(NSPCDT,SPCGRD,SPCDAT(1,ICOL),VMIN,VMAX,   &
+     &              DV,FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+              ENDDO
+              IF(CHUNIT.EQ.'M')THEN
+
+!                 MICRONS and W SR-1 CM-2 / MICRON:
+                  IF(RELABS.EQ.'R')THEN
+                      WRITE(IPUSCN,FMT=FRMT)(WDGRD(IDDGRD),             &
+     &                  SPCDAT(IDDGRD,1),(SPCDAT(IDDGRD,ICOL),          &
+     &                  ICOL=ICOLMN,ICOLMX),BT_UM(SPCDAT(IDDGRD,KCOL),  &
+     &                  REAL(WDGRD(IDDGRD)),M2_FAC),IDDGRD=1,NDDGRD)
+                  ELSE
+                      WRITE(IPUSCN,FMT=FRMT)                            &
+     &                  (WDGRD(IDDGRD),SPCDAT(IDDGRD,1),                &
+     &                  (SPCDAT(IDDGRD,ICOL),ICOL=ICOLMN,ICOLMX),       &
+     &                  BT_UM(SPCDAT(IDDGRD,KCOL),REAL(WDGRD(IDDGRD)),  &
+     &                  M2_FAC/REAL(WDGRD(IDDGRD)**2)),IDDGRD=1,NDDGRD)
+                  ENDIF
+              ELSE
+
+!                 NANOMETERS and microW SR-1 CM-2 / NANOMETER:
+                  IF(RELABS.EQ.'R')THEN
+                      WRITE(IPUSCN,FMT=FRMT)(WDGRD(IDDGRD),             &
+     &                  SPCDAT(IDDGRD,1),(SPCDAT(IDDGRD,ICOL),          &
+     &                  ICOL=ICOLMN,ICOLMX),BT_NM(SPCDAT(IDDGRD,KCOL),  &
+     &                  REAL(WDGRD(IDDGRD)),M2_FAC),IDDGRD=1,NDDGRD)
+                  ELSE
+                      WRITE(IPUSCN,FMT=FRMT)                            &
+     &                  (WDGRD(IDDGRD),SPCDAT(IDDGRD,1),                &
+     &                  (SPCDAT(IDDGRD,ICOL),ICOL=ICOLMN,ICOLMX),       &
+     &                  BT_NM(SPCDAT(IDDGRD,KCOL),REAL(WDGRD(IDDGRD)),  &
+     &                  M2_FAC/REAL(WDGRD(IDDGRD)**2)),IDDGRD=1,NDDGRD)
+                  ENDIF
+              ENDIF
+          ENDIF
+
+!         WRITE INTEGRATED RESULTS:
+          WRITE(IPR,'(/1X,A,1P,E14.5,1X,A)')                            &
+     &      'UNCONVOLVED INTEGRATED RADIANCE:',SUMUNC,'W CM-2 SR-1'
+
+!         INTEGRATE TOTAL RADIANCE (IF IN NM, CONVERT FROM microW TO W).
+          IF(NDDGRD.GT.1)THEN
+              SUMCON=BNDPAS(NDDGRD,WDGRD,SPCDAT(1,KCOL),                &
+     &          WDGRD(1),WDGRD(NDDGRD))
+              IF(CHUNIT.EQ.'N')SUMCON=1.D-6*SUMCON
+              WRITE(IPR,'(1X,A,1P,E14.5,1X,A)')                         &
+     &          'CONVOLVED   INTEGRATED RADIANCE:',SUMCON,'W CM-2 SR-1'
+          ENDIF
+      ENDIF
+      WRITE(IPUSCN,'(A,I5)')                                            &
+     &  TXTSPR//'    End of spectral data for slant path no.',ILOS
+
+!     WRITE OUT THE SPECTRALLY SCANNED PLOT OUTPUT FILE, pltout.scn, OR
+!     <ROOTNAME>.psc
+      INQUIRE(IPTSCN,OPENED=LOPEN)
+      IF(.NOT.LOPEN)THEN
+          IF (LNFLRT.GT.0)THEN
+              CALL OPNFL(IPTSCN,0,FLRT(1:LNFLRT)//'.psc','UNKNOWN',     &
+     &          'FORMATTED','DGRD')
+          ELSE
+              CALL OPNFL(IPTSCN,0,'pltout.scn','UNKNOWN','FORMATTED',   &
+     &          'DGRD')
+          ENDIF
+      ENDIF
+      SPCMX=0.
+      IF(YFLAG.EQ.'T')THEN
+          IF(CHUNIT.EQ.'W')THEN
+              FRMT(1:29)='((0P,F15.2,F15.8))           '
+          ELSEIF(CHUNIT.EQ.'M')THEN
+              FRMT(1:29)='((0P,F15.6,F15.8))           '
+          ELSE
+              FRMT(1:29)='((0P,F15.3,F15.8))           '
+          ENDIF
+          FRMT(30:77)='                                                '
+          DO IDDGRD=1,NDDGRD
+             IF(SPCDAT(IDDGRD,1).GT.SPCMX)SPCMX=SPCDAT(IDDGRD,1)
+             WRITE(IPTSCN,FMT=FRMT)WDGRD(IDDGRD),SPCDAT(IDDGRD,1)
+          ENDDO
+          IF(DLIMIT.EQ.'        ')THEN
+              WRITE(IPTSCN,*)
+          ELSEIF(CHUNIT.EQ.'W')THEN
+              WRITE(IPTSCN,'(2A,0P,F15.8,A)')DLIMIT,'   MAXIMUM'//      &
+     &          ' TRANSMITTANCE =',SPCMX,' (FREQUENCIES IN CM-1)'
+          ELSEIF(CHUNIT.EQ.'M')THEN
+              WRITE(IPTSCN,'(2A,0P,F15.8,A)')DLIMIT,'   MAXIMUM'//      &
+     &          ' TRANSMITTANCE =',SPCMX,' (WAVELENGTHS IN MICRONS)'
+          ELSE
+              WRITE(IPTSCN,'(2A,0P,F15.8,A)')DLIMIT,'   MAXIMUM'//      &
+     &          ' TRANSMITTANCE =',SPCMX,' (WAVELENGTHS IN NANOMETERS)'
+          ENDIF
+      ELSEIF(YFLAG.EQ.'R')THEN
+
+!         RADIANCE OR IRRADIANCE OUTPUT:
+          IF(CHUNIT.EQ.'W')THEN
+              FRMT(1:29)='((0P,F15.2,1P,E15.5))        '
+          ELSEIF(CHUNIT.EQ.'M')THEN
+              FRMT(1:29)='((0P,F15.6,1P,E15.5))        '
+          ELSE
+              FRMT(1:29)='((0P,F15.3,1P,E15.5))        '
+          ENDIF
+          FRMT(30:77)='                                                '
+          DO IDDGRD=1,NDDGRD
+              IF(SPCDAT(IDDGRD,KCOL).GT.SPCMX)SPCMX=SPCDAT(IDDGRD,KCOL)
+              WRITE(IPTSCN,FMT=FRMT)WDGRD(IDDGRD),SPCDAT(IDDGRD,KCOL)
+          ENDDO
+          IF(IEMSCT.EQ.3)THEN
+
+!             TRANSMITTED SOLAR SPECTRAL IRRADIANCES:
+              IF(DLIMIT.EQ.'        ')THEN
+                  WRITE(IPTSCN,*)
+              ELSEIF(CHUNIT.EQ.'W')THEN
+                  WRITE(IPTSCN,'(2A,1P,E15.5,A)')DLIMIT,                &
+     &              '   MAXIMUM TRANSMITTED SOLAR SPECTRAL'//           &
+     &              ' IRRADIANCE =',SPCMX,' W CM-2 / CM-1'
+              ELSEIF(CHUNIT.EQ.'M')THEN
+                  WRITE(IPTSCN,'(2A,1P,E15.5,A)')DLIMIT,                &
+     &              '   MAXIMUM TRANSMITTED SOLAR SPECTRAL'//           &
+     &              ' IRRADIANCE =',SPCMX,' W CM-2 / MICRON'
+              ELSE
+                  WRITE(IPTSCN,'(2A,1P,E15.5,A)')DLIMIT,                &
+     &              '   MAXIMUM TRANSMITTED SOLAR SPECTRAL'//           &
+     &              ' IRRADIANCE =',SPCMX,' uW CM-2 / NM'
+              ENDIF
+          ELSE
+
+!             TOTAL PATH SPECTRAL RADIANCES:
+              IF(DLIMIT.EQ.'        ')THEN
+                  WRITE(IPTSCN,*)
+              ELSEIF(CHUNIT.EQ.'W')THEN
+                  WRITE(IPTSCN,'(A,1P,E15.5,A,I5)')                     &
+     &              DLIMIT//'   MAXIMUM SPECTRAL RADIANCE =',SPCMX,     &
+     &              ' W SR-1 CM-2 / CM-1 FOR SLANT PATH NO.',ILOS
+              ELSEIF(CHUNIT.EQ.'M')THEN
+                  WRITE(IPTSCN,'(A,1P,E15.5,A,I5)')                     &
+     &              DLIMIT//'   MAXIMUM SPECTRAL RADIANCE =',SPCMX,     &
+     &              ' W SR-1 CM-2 / MICRON FOR SLANT PATH NO.',ILOS
+              ELSE
+                  WRITE(IPTSCN,'(A,1P,E15.5,A,I5)')                     &
+     &              DLIMIT//'   MAXIMUM SPECTRAL RADIANCE =',SPCMX,     &
+     &              ' uW SR-1 CM-2 / NM FOR SLANT PATH NO.',ILOS
+              ENDIF
+          ENDIF
+      ENDIF
+      RETURN
+   30 CONTINUE
+
+!     ERROR MESSAGE
+      WRITE(IPR,'(/A)')                                                 &
+     &  ' Error1 in DGRD:  Ran out of data in scratch file (JPUSCR)'
+      IF(ISPCDT.GT.1)WRITE(IPR,'(16X,A,F10.2,A)')' Check line'//        &
+     &  ' following spectral frequency',SPCGRD(ISPCDT-1),' CM-1.'
+      WRITE(IPR,'((16X,A,I8))')                                         &
+     &  ' Attempting to read spectral point    ',ISPCDT,                &
+     &  ' Number of spectral points required is',NSPCDT
+      STOP ' Error in DGRD:  Ran out of data in scratch file (JPUSCR)'
+
+   40 CONTINUE
+      WRITE(IPR,'(/A)')                                                 &
+     &  ' Error2 in DGRD:  Ran out of data in scratch file (JPUSCR).'
+      WRITE(IPR,*)HEADER(1:4),JEMSCT,JNMX,JNMY,JMULT,LDIS
+      STOP ' Error2 in DGRD, Ran out of data in scratch file (JPUSCR).'
+      END
+
+      SUBROUTINE CNVRTR(NSPCDT,SPC0,IDV,SPCDAT,CHUNIT)
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       NSPCDT   NUMBER OF TAPE7.SCR SPECTRAL DATA POINTS.
+!       SPC0     SPECTRAL FREQUENCY OFFSET [CM-1].
+!       IDV      SPECTRAL FREQUENCY INCREMENT [CM-1].
+!       SPCDAT   TAPE7.SCR SPECTRAL DATA TABLE.
+!       CHUNIT   UNIT FLAG ('W'=WAVENUMBERS;'M'=MICRONS;'N'=NANOMETERS).
+      DOUBLE PRECISION IDV
+      REAL SPC0,SPCDAT(*)
+      INTEGER NSPCDT
+      CHARACTER CHUNIT*1
+
+!     LOCAL VARIABLES
+!       ISPCDT   SPECTRAL GRID COUNTER.
+      INTEGER ISPCDT
+
+!     BRANCH BASED ON UNITS:
+      IF(CHUNIT.EQ.'M')THEN
+
+!         SPCGRD IN MICRONS.  CONVERT PER CM-1 TO PER MICRON.
+          DO ISPCDT=1,NSPCDT
+              SPCDAT(ISPCDT)                                            &
+     &          =1.E-4*SPCDAT(ISPCDT)*(SPC0+ISPCDT*REAL(IDV))**2
+          ENDDO
+      ELSEIF(CHUNIT.EQ.'N')THEN
+
+!         SPCGRD IN NANOMETERS.  CONVERT W / CM-1 TO microW / NANOMETER.
+          DO ISPCDT=1,NSPCDT
+              SPCDAT(ISPCDT)                                            &
+     &          =.1*SPCDAT(ISPCDT)*(SPC0+ISPCDT*REAL(IDV))**2
+          ENDDO
+      ENDIF
+      RETURN
+      END
+
+      REAL FUNCTION CNVRTW(NSPCDT,IDV,SPCGRD,SPCDAT,WNMIN,WNMAX,CHUNIT)
+
+!     CNVRTW (1) INTEGRATES THE SPCDAT UNCONVOLVED SPECTRUM,
+!     (2) SHIFTS SPCGRD BIN CENTER FREQUENCIES TO BIN EDGE FREQUENCIES,
+!     AND (3) CONVERTS SPECTRAL GRID FROM CM-1 TO "CHUNIT" UNIT.
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       NSPCDT   NUMBER OF TAPE7.SCR SPECTRAL DATA POINTS.
+!       IDV      BIN SPECTRAL WIDTH [CM-1].
+!       SPCGRD   TAPE7.SCR BIN CENTER SPECTRAL GRID [CM-1].
+!       SPCDAT   SPECTRAL DATA BEING INTEGRATED.
+!       WNMIN    REQUESTED SPECTRAL RANGE MINIMUM FREQUENCY [CM-1].
+!       WNMAX    REQUESTED SPECTRAL RANGE MAXIMUM FREQUENCY [CM-1].
+!       CHUNIT   UNIT FLAG ('W'=WAVENUMBERS;'M'=MICRONS;'N'=NANOMETERS).
+
+!     OUTPUT ARGUMENTS:
+!       SPCGRD   BIN EDGE SPECTRAL GRID [CHUNIT DEFINES UNIT].
+      INTEGER NSPCDT
+      DOUBLE PRECISION IDV
+      REAL SPCGRD(0:NSPCDT),SPCDAT(NSPCDT),WNMIN,WNMAX
+      CHARACTER CHUNIT*1
+
+!     COMMONS:
+      INCLUDE 'IFIL.h'
+
+!     LOCAL VARIABLES
+!       ISPCDT   SPECTRAL GRID COUNTER.
+!       ISPCLO   REVISED LOWER BOUND INDEX ON SPECTRAL LOOP.
+!       P5IDV    HALF THE BIN SPECTRAL WIDTH [CM-1].
+!       SUMDAT   SPECTRAL INTEGRATION OF SPCDAT.
+!       CONVRT   SPECTRAL FREQUENCY TO WAVELENGTH CONVERSION NUMERATOR.
+      INTEGER ISPCDT,ISPCLO
+      REAL P5IDV,CONVRT
+      DOUBLE PRECISION SUMDAT
+
+!     INITIALIZATIONS:
+      P5IDV=REAL(IDV)/2
+
+!     BRANCH BASED ON UNITS:
+      IF(CHUNIT.EQ.'W')THEN
+
+!         DEFINE AND CHECK INITIAL SPECTRAL FREQUENCY:
+          SPCGRD(0)=SPCGRD(1)-P5IDV
+          IF(WNMIN.LT.SPCGRD(0))GOTO 50
+
+!         FIND UPPER BOUND TO WNMIN:
+          DO ISPCDT=1,NSPCDT
+              SPCGRD(ISPCDT)=SPCGRD(ISPCDT)+P5IDV
+              IF(WNMIN.LE.SPCGRD(ISPCDT))GOTO 10
+          ENDDO
+
+!         ERROR:  WNMIN EXCEEDS SPCGRD(NSPCDT).
+          GOTO 50
+
+!         INITIALIZE INTEGRATION SUMDAT:
+   10     CONTINUE
+          SUMDAT=DBLE((SPCGRD(ISPCDT)-WNMIN)*SPCDAT(ISPCDT))
+
+!         INCREMENT INTEGRATION AND FIND UPPER BOUND TO WNMAX:
+          ISPCLO=ISPCDT+1
+          DO ISPCDT=ISPCLO,NSPCDT
+              SPCGRD(ISPCDT)=SPCGRD(ISPCDT)+P5IDV
+              IF(WNMAX.LE.SPCGRD(ISPCDT))GOTO 20
+              SUMDAT=SUMDAT+IDV*DBLE(SPCDAT(ISPCDT))
+          ENDDO
+
+!         ERROR:  WNMAX EXCEEDS SPCGRD(NSPCDT).
+          GOTO 50
+
+!         FINALIZE SUMDAT:
+   20     CONTINUE
+          CNVRTW=REAL(SUMDAT)+(WNMAX-SPCGRD(ISPCDT-1))*SPCDAT(ISPCDT)
+
+!         DEFINE REMAINING SPECTRAL EDGES AND RETURN:
+          ISPCLO=ISPCDT+1
+          DO ISPCDT=ISPCLO,NSPCDT
+              SPCGRD(ISPCDT)=SPCGRD(ISPCDT)+P5IDV
+          ENDDO
+      ELSE
+
+!         CONVERSION TO SPECTRAL WAVELENGTHS REQUESTED:
+          IF(CHUNIT.EQ.'M')THEN
+              CONVRT=1.E4
+          ELSEIF(CHUNIT.EQ.'N')THEN
+              CONVRT=1.E7
+          ELSE
+              WRITE(IPR,'(/A)')' Error in CNVRTW:  Bad CHUNIT value.'
+              STOP ' Error in CNVRTW:  Bad CHUNIT value.'
+          ENDIF
+
+!         DEFINE AND CHECK INITIAL SPECTRAL FREQUENCY:
+          SPCGRD(0)=SPCGRD(1)-P5IDV
+          IF(WNMIN.LT.SPCGRD(0))GOTO 50
+
+!         FIND UPPER BOUND TO WNMIN:
+          DO ISPCDT=1,NSPCDT
+              SPCGRD(ISPCDT)=SPCGRD(ISPCDT)+P5IDV
+              IF(WNMIN.LE.SPCGRD(ISPCDT))GOTO 30
+              SPCGRD(ISPCDT)=CONVRT/SPCGRD(ISPCDT)
+          ENDDO
+
+!         ERROR:  WNMIN EXCEEDS SPCGRD(NSPCDT).
+          SPCGRD(0)=CONVRT/SPCGRD(0)
+          SPCGRD(NSPCDT)=CONVRT/SPCGRD(NSPCDT)
+          GOTO 50
+
+!         INITIALIZE INTEGRATION SUMDAT:
+   30     CONTINUE
+          SUMDAT=DBLE((SPCGRD(ISPCDT)-WNMIN)*SPCDAT(ISPCDT))
+          SPCGRD(ISPCDT)=CONVRT/SPCGRD(ISPCDT)
+
+!         INCREMENT INTEGRATION AND FIND UPPER BOUND TO WNMAX:
+          ISPCLO=ISPCDT+1
+          DO ISPCDT=ISPCLO,NSPCDT
+              SPCGRD(ISPCDT)=SPCGRD(ISPCDT)+P5IDV
+              IF(WNMAX.LE.SPCGRD(ISPCDT))GOTO 40
+              SUMDAT=SUMDAT+IDV*DBLE(SPCDAT(ISPCDT))
+              SPCGRD(ISPCDT)=CONVRT/SPCGRD(ISPCDT)
+          ENDDO
+
+!         ERROR:  WNMAX EXCEEDS SPCGRD(NSPCDT).
+          SPCGRD(0)=CONVRT/SPCGRD(0)
+          SPCGRD(NSPCDT)=CONVRT/SPCGRD(NSPCDT)
+          GOTO 50
+
+!         FINALIZE SUMDAT:
+   40     CONTINUE
+          CNVRTW=REAL(SUMDAT)+                                          &
+     &      (WNMAX-(SPCGRD(ISPCDT)-REAL(IDV)))*SPCDAT(ISPCDT)
+          SPCGRD(ISPCDT)=CONVRT/SPCGRD(ISPCDT)
+
+!         DEFINE REMAINING SPECTRAL EDGES AND RETURN:
+          ISPCLO=ISPCDT+1
+          DO ISPCDT=ISPCLO,NSPCDT
+              SPCGRD(ISPCDT)=CONVRT/(SPCGRD(ISPCDT)+P5IDV)
+          ENDDO
+      ENDIF
+      RETURN
+
+   50 CONTINUE
+!     SPECTRAL GRID PROBLEM:
+      WRITE(IPR,'(A,2(F9.2,A),/17X,A,2(F9.2,A))')' STOP in CNVRTW: '    &
+     &  //' Requested spectral band pass (',WNMIN,' TO',WNMAX,          &
+     &  ' CM-1) extends beyond the',' calculated spectrum (',           &
+     &  SPCGRD(0),' TO',SPCGRD(NSPCDT)+P5IDV,' CM-1).'
+      STOP 'Check end of *.tp6 for ERROR.'
+      END
+
+      SUBROUTINE DEGRAD(NSPCDT,SPCGRD,SPCDAT,WMIN,WMAX,DELWD,           &
+     &  FWSCAN,FWHM,I_SCAN,NDDGRD,WDGRD,DDGRD)
+
+!     DEGRAD APPLIES THE INSTRUMENT RESPONSE FUNCTION TO A HIGHER
+!     RESOLUTION SPECTRUM TO OBTAIN A CONVOLVED SPECTRUM.  THE
+!     ORIGINAL DATA IN ARRAY SPCDAT IS REPLACED BY THE CONVOLVED
+!     DATA. THE OUTPUT CONVOLVED SPECTRUM IS UNIFORMLY SPACED.  THERE
+!     IS NO CHANGE IN UNITS, I.E., INPUT AND OUTPUT UNITS ARE SAME.
+      IMPLICIT NONE
+
+!     ARGUMENTS:
+      INTEGER NSPCDT,I_SCAN,NDDGRD
+      REAL FWSCAN,FWHM,SPCGRD(0:NSPCDT),SPCDAT(*),DDGRD(*)
+      DOUBLE PRECISION WMIN,WMAX,DELWD,WDGRD(*)
+
+!     COMMONS:
+
+!     /CSCAN/
+!       CHUNIT   UNIT FLAG ('W'=WAVENUMBERS;'M'=MICRONS;'N'=NANOMETERS).
+!       RELABS   SPECTRAL RESOLUTION FLAG('A'=ABSOLUTE;'R'=RELATIVE[%]).
+!       LNFEED   LINE FEED FLAG FOR .FLX FILE ('T' FOR 80 CHARACTER
+!                  LINES, 'F' FOR LONG LINES, ' ' FOR NO .FLX FILE).
+      CHARACTER CHUNIT*1,RELABS*1,LNFEED*1
+      COMMON/CSCAN/CHUNIT,RELABS,LNFEED
+
+!     LOCAL VARIABLES:
+!       LINIT    INITIALIZATION FLAG FOR ROUTINE WEIGHT.
+!       WDPAD    CONVOLUTION TOTAL HALF-WIDTH [CHUNIT DEFINES UNIT].
+!       WDGRD0   SPECTRAL GRID OFFSET [CHUNIT DEFINES UNIT].
+!       WDGRDI   CURRENT SPECTRAL GRID POINT [CHUNIT DEFINES UNIT].
+!       FWHM0    FULL-WIDTH AT HALF MAXIMUM [CHUNIT DEFINES UNIT].
+!       WDBEG    DEGRADE BEGINNING SPECTRAL POINT [CHUNIT DEFINES UNIT].
+!       WDEND    DEGRADE ENDING SPECTRAL POINT [CHUNIT DEFINES UNIT].
+      INTEGER IDDGRD,J,JBEG
+      REAL WDPAD,WDBEG,WDEND,WGT,SUMNUM,SUMDEN,WEIGHT,FWHM0,DBEG,DEND,  &
+     &  WDGRDI
+      DOUBLE PRECISION WDGRD0
+      LOGICAL PERCNT,LINIT
+
+!     PERCNT IS FALSE IF RELABS IS NEITHER BLANK NOR 'A'
+      PERCNT=RELABS.NE.'A' .AND. RELABS.NE.'a' .AND. RELABS.NE.' '
+
+      NDDGRD=INT(DBLE(WMAX-WMIN)/DELWD+1.1D0)
+      WDGRD0=WMIN-DELWD
+      FWHM0=FWHM
+      WDPAD=FWSCAN*FWHM
+
+      DO IDDGRD=1,NDDGRD
+          WDGRD(IDDGRD)=WDGRD0+IDDGRD*DELWD
+          WDGRDI=REAL(WDGRD(IDDGRD))
+          IF(PERCNT)THEN
+              FWHM0=(FWHM/100)*WDGRDI
+              WDPAD=FWSCAN*FWHM0
+          ENDIF
+          SUMDEN=0.
+          SUMNUM=0.
+          DEND=-WDPAD
+          LINIT=.TRUE.
+          IF(CHUNIT.EQ.'W')THEN
+
+!             SPECTRAL FREQUENCY => INCREASING SPECTRAL GRID:
+              WDBEG=WDGRDI-WDPAD
+              WDEND=WDGRDI+WDPAD
+              DO J=1,NSPCDT-1
+                  IF(WDBEG.LE.SPCGRD(J))GOTO 10
+              ENDDO
+   10         CONTINUE
+              JBEG=J
+              DO J=JBEG,NSPCDT
+                  IF(WDEND.LE.SPCGRD(J))GOTO 30
+                  DBEG=DEND
+                  DEND=SPCGRD(J)-WDGRDI
+                  WGT=WEIGHT(I_SCAN,FWHM0,DBEG,DEND,LINIT)
+                  SUMDEN=SUMDEN+WGT
+                  SUMNUM=SUMNUM+WGT*SPCDAT(J)
+              ENDDO
+              STOP 'Error in DEGRAD:  Not enough spectral data.'
+          ELSE
+
+!             SPECTRAL WAVELENGTH => DECREASING SPECTRAL GRID:
+              WDBEG=WDGRDI+WDPAD
+              WDEND=WDGRDI-WDPAD
+              DO J=1,NSPCDT-1
+                  IF(WDBEG.GE.SPCGRD(J))GOTO 20
+              ENDDO
+   20         CONTINUE
+              JBEG=J
+              DO J=JBEG,NSPCDT
+                  IF(WDEND.GE.SPCGRD(J))GOTO 30
+                  DBEG=DEND
+                  DEND=WDGRDI-SPCGRD(J)
+                  WGT=WEIGHT(I_SCAN,FWHM0,DBEG,DEND,LINIT)
+                  SUMDEN=SUMDEN+WGT
+                  SUMNUM=SUMNUM+WGT*SPCDAT(J)
+              ENDDO
+              STOP 'Error in DEGRAD:  Not enough spectral data.'
+          ENDIF
+   30     CONTINUE
+          WGT=WEIGHT(I_SCAN,FWHM0,DEND,WDPAD,LINIT)
+          SUMDEN=SUMDEN+WGT
+          IF(SUMDEN.NE.0.)THEN
+              DDGRD(IDDGRD)=(SUMNUM+WGT*SPCDAT(J))/SUMDEN
+          ELSE
+              DDGRD(IDDGRD)=0.
+          ENDIF
+      ENDDO
+
+!     REPLACE ORIGINAL ARRAY WITH DEGRADED DATA:
+      DO IDDGRD=1,NDDGRD
+          SPCDAT(IDDGRD)=DDGRD(IDDGRD)
+      ENDDO
+      RETURN
+      END
+
+      REAL FUNCTION WEIGHT(I_SCAN,FWHM,DBEG,DEND,LINIT)
+
+!     WEIGHT INTEGRATES THE SPECTRAL CONVOLUTION FUNCTION BETWEEN
+!     SPECTRAL POINTS WITHIN THE RANGE OF ITS SPECTRAL DOMAIN.
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       I_SCAN   SCANNING FUNCTION NUMERICAL LABEL.
+!                (1=TRIANG,2=RECT,3=GAUSS,4=SINC,5=SINC2,6=HAMM,7=USER)
+!       FWHM     FULL-WIDTH-AT-HALF-MAXIMUM [CHUNIT DEFINES UNIT].
+!       DBEG     INTEGRATION LOWER BOUND [CHUNIT DEFINES UNIT].
+!       DEND     INTEGRATION UPPER BOUND [CHUNIT DEFINES UNIT].
+!       LINIT    INITIALIZATION FLAG.
+      INTEGER I_SCAN
+      REAL FWHM,DBEG,DEND
+      LOGICAL LINIT
+
+!     PARAMETERS:
+!       RT4LN2   SQUARE ROOT OF 4 TIMES THE NATURAL LOGARITHM OF 2.
+!       RSINC    VALUE AT WHICH SINC(RSINC/2) EQUALS ONE-HALF.
+!                SINC(X) = SIN(pi X) / (pi X)
+!       RSINC2   VALUE AT WHICH SINC(RSINC/2) SQUARED EQUALS ONE-HALF.
+!       PI       3.14159...
+!       A0HAMM   HAMMING FUNCTION COEFFICIENT.
+!       A1HAMM   HAMMING FUNCTION COEFFICIENT.
+!                A0HAMM AND A1HAMM ARE DETERMINED FROM THE EQUATIONS
+!                A0 SINC(5/2) + A1 [SINC(7/2) + SINC (3/2)] = 0, AND
+!                A0 + 2 A1 = 1.
+!       RHAMM    VALUE WHICH THE SUM OF A0 SINC(RHAMM/2) AND
+!                A1 [SINC(RHAMM/2+1) +SINC(RHAMM/2-1)] EQUALS A0/2.
+      REAL RT4LN2,RSINC,RSINC2,A0HAMM,A1HAMM,RHAMM
+      PARAMETER(RT4LN2=1.665109,RSINC=1.206709,RSINC2=.8858929,         &
+     &  A0HAMM=25./46,A1HAMM=21./92,RHAMM=1.801645)
+
+!     COMMONS:
+!     /RCNSTN/
+!       PI       THE CONSTANT PI
+!       DEG      NUMBER OF DEGREES IN ONE RADIAN.
+!       BIGNUM   MAXIMUM SINGLE PRECISION NUMBER.
+!       BIGEXP   MAXIMUM EXPONENTIAL ARGUMENT WITHOUT OVERFLOW.
+!       RRIGHT   SMALLEST SINGLE PRECISION REAL ADDED TO 1 EXCEEDS 1.
+      REAL PI,DEG,BIGNUM,BIGEXP,RRIGHT
+      COMMON/RCNSTN/PI,DEG,BIGNUM,BIGEXP,RRIGHT
+
+!     FUNCTIONS:
+!       ERFCOM   COMPLEMENT OF THE ERROR FUNCTION.
+!       COMPSI   NORMALIZED COMPLEMENT OF THE SINE FUNCTION.
+!       USER     USER DEFINED SLIT FUNCTION INTEGRATION.
+      REAL ERFCOM,COMPSI,USER
+
+!     LOCAL VARIABLES:
+!       IEND     SPECTRAL FUNCTION INTEGRAL FROM DEND TO INFINITY.
+!       ARG      ARGUMENT USED WITH COMPSI FUNCTION.
+!       PIARG    PI TIMES ARG.
+!       PIARG2   SQUARE OF THE PRODUCT OF PI AND ARG.
+      REAL IEND,ARG,PIARG,PIARG2
+
+!     SAVED VARIABLES:
+!       ARGCON   CONSTANT USED TO CALCULATION SPECIAL FUNCTION ARGUMENT.
+!       IBEG     SPECTRAL FUNCTION INTEGRAL FROM DBEG TO INFINITY.
+      REAL ARGCON,IBEG
+      SAVE ARGCON,IBEG
+
+!     BRANCH BASED ON FUNCTION TYPE:
+      IF(I_SCAN.EQ.1)THEN
+
+!         TRIANGULAR:
+          IF(DEND.LE.0.)THEN
+
+!             NEGATIVE SIDE OF TRIANGLE.
+              WEIGHT=(DEND-DBEG)*(1+(DEND+DBEG)/(2*FWHM))/FWHM
+          ELSEIF(DBEG.GE.0.)THEN
+
+!             POSITIVE SIDE OF TRIANGLE.
+              WEIGHT=(DEND-DBEG)*(1-(DEND+DBEG)/(2*FWHM))/FWHM
+          ELSE
+
+!             BOTH SIDES OF TRIANGLE.
+              WEIGHT=(DEND-DBEG-(DEND**2+DBEG**2)/(2*FWHM))/FWHM
+          ENDIF
+      ELSEIF(I_SCAN.EQ.2)THEN
+
+!         RECTANGLE:
+          WEIGHT=(DEND-DBEG)/FWHM
+      ELSEIF(I_SCAN.EQ.3)THEN
+
+!         GAUSSIAN:
+          IF(LINIT)THEN
+              ARGCON=RT4LN2/FWHM
+
+!             THE INITIAL DBEG SHOULD ALWAYS BE LESS THAN ZERO.
+              IBEG=1-ERFCOM(-ARGCON*DBEG)/2
+              LINIT=.FALSE.
+          ENDIF
+          IF(DEND.LT.0.)THEN
+              IEND=1-ERFCOM(-ARGCON*DEND)/2
+          ELSE
+              IEND=ERFCOM(ARGCON*DEND)/2
+          ENDIF
+          WEIGHT=IBEG-IEND
+          IBEG=IEND
+      ELSEIF(I_SCAN.EQ.4)THEN
+
+!         SINC:
+          IF(LINIT)THEN
+              ARGCON=RSINC/FWHM
+
+!             THE INITIAL DBEG SHOULD ALWAYS BE LESS THAN ZERO.
+              IBEG=1-COMPSI(-ARGCON*DBEG)
+              LINIT=.FALSE.
+          ENDIF
+          IF(DEND.LT.0.)THEN
+              IEND=1-COMPSI(-ARGCON*DEND)
+          ELSE
+              IEND=COMPSI(ARGCON*DEND)
+          ENDIF
+          WEIGHT=IBEG-IEND
+          IBEG=IEND
+      ELSEIF(I_SCAN.EQ.5)THEN
+
+!         SINC SQUARED:
+          IF(LINIT)THEN
+              ARGCON=RSINC2/FWHM
+
+!             THE INITIAL DBEG SHOULD ALWAYS BE LESS THAN ZERO.
+              ARG=ARGCON*DBEG
+              IBEG=1-COMPSI(-2*ARG)
+              PIARG=PI*ARG
+              IF(PIARG.LT.-.001)THEN
+                  IBEG=IBEG+SIN(PIARG)**2/(PI*PIARG)
+              ELSE
+                  PIARG2=PIARG**2
+                  IBEG=IBEG+ARG*(1-PIARG2*(7.5-PIARG2)/22.5)
+              ENDIF
+              LINIT=.FALSE.
+          ENDIF
+          ARG=ARGCON*DEND
+          IF(DEND.LT.0.)THEN
+              IEND=1-COMPSI(-2*ARG)
+              PIARG=PI*ARG
+              IF(PIARG.LT.-.001)THEN
+                  IEND=IEND+SIN(PIARG)**2/(PI*PIARG)
+              ELSE
+                  PIARG2=PIARG**2
+                  IEND=IEND+ARG*(1-PIARG2*(7.5-PIARG2)/22.5)
+              ENDIF
+          ELSE
+              IEND=COMPSI(2*ARG)
+              PIARG=PI*ARG
+              IF(PIARG.GT..001)THEN
+                  IEND=IEND+SIN(PIARG)**2/(PI*PIARG)
+              ELSE
+                  PIARG2=PIARG**2
+                  IEND=IEND+ARG*(1-PIARG2*(7.5-PIARG2)/22.5)
+              ENDIF
+          ENDIF
+          WEIGHT=IBEG-IEND
+          IBEG=IEND
+      ELSEIF(I_SCAN.EQ.6)THEN
+
+!         HAMMING:
+          IF(LINIT)THEN
+              ARGCON=RHAMM/FWHM
+
+!             THE INITIAL DBEG SHOULD ALWAYS BE LESS THAN ZERO.
+              ARG=ARGCON*DBEG
+              IBEG=A0HAMM*(1-COMPSI(-ARG))
+              IF(1+ARG.GE.0.)THEN
+                  IBEG=IBEG+A1HAMM*(1-COMPSI(1-ARG)+COMPSI(1+ARG))
+              ELSE
+                  IBEG=IBEG+A1HAMM*(2-COMPSI(1-ARG)-COMPSI(-1-ARG))
+              ENDIF
+              LINIT=.FALSE.
+          ENDIF
+          ARG=ARGCON*DEND
+          IF(ARG.GE.0.)THEN
+              IEND=A0HAMM*COMPSI(ARG)
+              IF(ARG-1.GE.0.)THEN
+
+!                 ARG-1 > 0; ARG > 0; ARG+1 > 0
+                  IEND=IEND+A1HAMM*(COMPSI(ARG-1)+COMPSI(ARG+1))
+              ELSE
+
+!                 ARG-1 < 0; ARG > 0; ARG+1 > 0
+                  IEND=IEND+A1HAMM*(1-COMPSI(1-ARG)+COMPSI(1+ARG))
+              ENDIF
+          ELSE
+              IEND=A0HAMM*(1-COMPSI(-ARG))
+              IF(ARG+1.GE.0.)THEN
+
+!                 ARG-1 < 0; ARG < 0; ARG+1 > 0
+                  IEND=IEND+A1HAMM*(1-COMPSI(1-ARG)+COMPSI(1+ARG))
+              ELSE
+
+!                 ARG-1 < 0; ARG < 0; ARG+1 < 0
+                  IEND=IEND+A1HAMM*(2-COMPSI(1-ARG)-COMPSI(-1-ARG))
+              ENDIF
+          ENDIF
+          WEIGHT=IBEG-IEND
+          IBEG=IEND
+      ELSEIF(I_SCAN.EQ.7)THEN
+
+!         USER:
+          WEIGHT=USER()
+!user     WEIGHT=USER(DBEG,DEND,FWHM)
+      ENDIF
+      RETURN
+      END
+
+      REAL FUNCTION USER()
+!user REAL FUNCTION USER(DBEG,DEND,FWHM)
+
+!     STUB FOR USER DEFINED FILTER FUNCTION INTEGRAL.
+
+!     INPUT ARGUMENTS:
+!       FWHM     FULL-WIDTH-AT-HALF-MAXIMUM [CHUNIT DEFINES UNIT].
+!       DBEG     INTEGRATION LOWER BOUND [CHUNIT DEFINES UNIT].
+!       DEND     INTEGRATION UPPER BOUND [CHUNIT DEFINES UNIT].
+!user REAL DBEG,DEND,FWHM
+
+!     DATA:
+!       DEFINE   LOGICAL FLAG, SET TO TRUE WHEN FUNCTION IS DEFINED.
+      LOGICAL DEFINE
+      DATA DEFINE/.FALSE./
+      IF(.NOT.DEFINE)STOP                                               &
+     &  '* USER SUPPLIED SLIT FUNCTION INTEGRATION NOT DEFINED *'
+      USER=0.
+      RETURN
+      END
+
+      SUBROUTINE ADJUST(VMIN,VMAX,DV,IV1,IV2,FWSCAN,FWHM,RELABS,CHUNIT)
+
+!     ROUTINE ADJUST IS NEEDED IF A PRIOR TAPE7.SCR IS CURRENTLY REUSED.
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       RELABS .T. MEANS FWHM IS RELATIVE
+!       RELABS .F. MEANS FWHM IS ABSOLUTE
+!       VMIN, VMAX AND DV ARE TAPE5 SPECTRAL INPUTS
+!       CHUNIT INDICATES THE UNIT OF TAPE5 INPUTS
+!       IV1 AND IV2 ARE THE WAVENUMBER FREQUENCY VALUES IN TAPE7.SCR
+      DOUBLE PRECISION DV,VMIN,VMAX
+      REAL FWSCAN,FWHM,IV1,IV2
+      CHARACTER CHUNIT*1,RELABS*1
+
+!     ADJUST VMIN AND VMAX UPON RETURN IN UNITS AS SPECIFIED BY CHUNIT
+
+!     COMMONS:
+      INCLUDE 'IFIL.h'
+
+!     LOCAL VARIABLES:
+      REAL W1,W2,WDMIN,WDMAX,WDPT
+      LOGICAL LABSA
+      INTEGER IDROP,NDDGRD,I
+
+!     LABSA=.T. IS RELABS=UPPER OR LOWER CASE A OR A BLANK
+      LABSA=RELABS.EQ.CHAR(65).OR.RELABS.EQ.CHAR(97).OR.RELABS.EQ.' '
+
+      IF(CHUNIT.EQ.'W')THEN
+!        ALREADY IN CM-1
+         W1=IV1
+         W2=IV2
+      ELSEIF(CHUNIT.EQ.'M')THEN
+!        CHANGE FROM CM-1 TO MICRON
+         W2=1.E4/IV1
+         W1=1.E4/IV2
+      ELSEIF(CHUNIT.EQ.'N')THEN
+!        CHANGE FROM CM-1 TO NM
+         W2=1.E7/IV1
+         W1=1.E7/IV2
+      ENDIF
+
+      NDDGRD=INT((VMAX-VMIN)/DV)+1
+      IDROP=0
+      DO I=1,NDDGRD
+         WDPT=REAL(VMIN+(I-1)*DV)
+         IF(LABSA)THEN
+            WDMIN=WDPT-FWSCAN*FWHM
+         ELSE
+            WDMIN=WDPT-FWSCAN*(FWHM/100)*WDPT
+         ENDIF
+         IF(WDMIN.GE.W1)GOTO 10
+         WRITE(IPR,'(/A,F15.6,/22X,A)')' Warning from ADJUST: '//       &
+     &     ' Not enough padding for frequency ',WDPT,                   &
+     &     ' Probably using a prior tape7.scr'
+         IDROP=IDROP+1
+      ENDDO
+   10 CONTINUE
+      NDDGRD=NDDGRD-IDROP
+      VMIN=VMIN+IDROP*DV
+      DO I=2,NDDGRD
+          WDPT=REAL(VMIN+(I-1)*DV)
+          IF(LABSA)THEN
+              WDMAX=WDPT+FWSCAN*FWHM
+          ELSE
+              WDMAX=WDPT+FWSCAN*(FWHM/100)*WDPT
+          ENDIF
+          IF(WDMAX.GT.W2)THEN
+              WRITE(IPR,'(/A,F15.6,/22X,A)')' Warning from ADJUST: '//  &
+     &          ' Not enough padding for frequency .GE.',WDPT,          &
+     &          ' Probably using a prior tape7.scr'
+            GOTO 20
+         ENDIF
+      ENDDO
+   20 CONTINUE
+      NDDGRD=I-1
+      VMAX=VMIN+(NDDGRD-1)*DV
+      RETURN
+      END
+
+      DOUBLE PRECISION FUNCTION BNDPAS(NDDGRD,WDGRD,SPCDAT,WBEG,WEND)
+
+!     BNDPAS COMPUTES INTEGRATED (IR)RADIANCE FROM INPUT SPECTRUM.
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       NDDGRD   NUMBER OF DEGRADED DATA SPECTRAL POINTS.
+!       WDGRD    SPECTRAL GRID OF TAPE7.SCR DEGRADED DATA [CM-1 BEFORE
+!                CALL TO CNVRTW; CHUNIT DEFINES UNIT AFTER CNVRTW CALL].
+!       SPCDAT   SPECTRAL (IR)RADIANCE [PER CM-1, PER MICRON OR PER NM].
+!       WBEG     INTEGRATION BEGINNING SPECTRAL POINT [UNITS OF W].
+!       WEND     INTEGRATION END SPECTRAL POINT [UNITS OF W].
+      INTEGER NDDGRD
+      REAL SPCDAT(*)
+      DOUBLE PRECISION WBEG,WEND,WDGRD(*)
+
+!     LOCAL VARIABLES:
+      INTEGER J,JBEG,JEND,JENDM1
+      DOUBLE PRECISION R,DW,RSUM
+
+!     INCREASING OR DECREASING SPECTRAL GRID:
+      IF(WBEG.LE.WEND)THEN
+
+!         INCREASING SPECTRAL GRID:
+          DO JBEG=2,NDDGRD
+              IF(WBEG.LE.WDGRD(JBEG))GOTO 10
+          ENDDO
+          JBEG=NDDGRD
+   10     CONTINUE
+          DO JEND=JBEG,NDDGRD
+              IF(WEND.LE.WDGRD(JEND))GOTO 20
+          ENDDO
+          JEND=NDDGRD
+   20     CONTINUE
+      ELSE
+
+!         DECREASING SPECTRAL GRID:
+          DO JBEG=2,NDDGRD
+              IF(WBEG.GE.WDGRD(JBEG))GOTO 30
+          ENDDO
+          JBEG=NDDGRD
+   30     CONTINUE
+          DO JEND=JBEG,NDDGRD
+              IF(WEND.LE.WDGRD(JEND))GOTO 40
+          ENDDO
+          JEND=NDDGRD
+   40     CONTINUE
+      ENDIF
+      JENDM1=JEND-1
+      R=DBLE(SPCDAT(JBEG))
+      DW=WDGRD(JBEG)-WBEG
+      RSUM=DW*                                                          &
+     &  (2*R+(DBLE(SPCDAT(JBEG-1))-R)*DW/(WDGRD(JBEG)-WDGRD(JBEG-1)))
+      DO J=JBEG+1,JENDM1
+          RSUM=RSUM+DBLE(SPCDAT(J)+SPCDAT(J-1))*(WDGRD(J)-WDGRD(J-1))
+      ENDDO
+      R=DBLE(SPCDAT(JENDM1))
+      DW=WEND-WDGRD(JENDM1)
+      BNDPAS=(RSUM+DW*                                                  &
+     &  (2*R+(DBLE(SPCDAT(JEND))-R)*DW/(WDGRD(JEND)-WDGRD(JENDM1))))/2
+      IF(WBEG.GT.WEND)BNDPAS=-BNDPAS
+      RETURN
+      END
+
+      REAL FUNCTION ERFCOM(X)
+
+!     RETURNS THE COMPLEMENTARY ERROR FUNCTION FOR
+!     POSITIVE REAL ARGUMENT X:
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       X        NON-NEGATIVE AND REAL FUNCTION ARGUMENT.
+      REAL X
+
+!     FUNCTIONS:
+!       EXERFC   RETURNS EXP(X*X) ERFC(X) AT NON-NEGATIVE ARGUMENT X.
+      REAL EXERFC
+      ERFCOM=EXP(-X**2)*EXERFC(X)
+      RETURN
+      END
+
+      REAL FUNCTION EXERFC(X)
+
+!     RETURNS THE PRODUCT OF EXP(X*X) AND THE COMPLEMENTARY
+!     ERROR FUNCTION FOR NON-NEGATIVE AND REAL ARGUMENT X.
+!     [ABRAMOWITZ AND STEGUN, Eq 7.1.26].
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       X        NON-NEGATIVE AND REAL FUNCTION ARGUMENT.
+      REAL X
+
+!     PARAMETERS:
+      DOUBLE PRECISION P,A1,A2,A3,A4,A5
+      PARAMETER(P=.3275911D0,A1=.254829592D0,A2=-.284496736D0,          &
+     &  A3=1.421413741D0,A4=-1.453152027D0,A5=1.061405429D0)
+
+!     LOCAL VARIABLES:
+      DOUBLE PRECISION T
+
+!     ALGORITHM:
+      T=1.D0/(1.D0+P*DBLE(X))
+      EXERFC=REAL(T*(A1+T*(A2+T*(A3+T*(A4+T*A5)))))
+      RETURN
+      END
+
+      REAL FUNCTION COMPSI(ARG)
+
+!     FOR ARG NON-NEGATIVE, THIS ROUTINE COMPUTES
+
+!       inf
+!        /  sin(pi a)        1   Si(pi A)
+!        |  --------- da  =  - - --------
+!        /    pi a           2      pi
+!        A
+
+!                             f(pi A)             g(pi A)
+!                          =  ------- cos(pi A) + ------- sin(pi A)
+!                               pi                  pi
+
+!     USING THE PRESCRIPTION OF ABRAMOWITZ AND STEGUN, CHAPTER 5.
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       ARG     FUNCTION ARGUMENT (NON-NEGATIVE).
+      REAL ARG
+
+!     PARAMETERS:
+      DOUBLE PRECISION FA,FB,FC,FD,FE,FF,FG,FH,GA,GB,GC,GD,GE,GF,GG,GH
+      PARAMETER(                                                        &
+     &  FA=38.027264D0,FB=265.187033D0,FC= 335.677320D0,FD= 38.102495D0,&
+     &  FE=40.021433D0,FF=322.624911D0,FG= 570.236280D0,FH=157.105423D0,&
+     &  GA=42.242855D0,GB=302.757865D0,GC= 352.018498D0,GD= 21.821899D0,&
+     &  GE=48.196927D0,GF=482.485984D0,GG=1114.978885D0,GH=449.690326D0)
+
+!     COMMONS:
+!     /RCNSTN/
+!       PI       THE CONSTANT PI
+!       DEG      NUMBER OF DEGREES IN ONE RADIAN.
+!       BIGNUM   MAXIMUM SINGLE PRECISION NUMBER.
+!       BIGEXP   MAXIMUM EXPONENTIAL ARGUMENT WITHOUT OVERFLOW.
+!       RRIGHT   SMALLEST SINGLE PRECISION REAL ADDED TO 1 EXCEEDS 1.
+      REAL PI,DEG,BIGNUM,BIGEXP,RRIGHT
+      COMMON/RCNSTN/PI,DEG,BIGNUM,BIGEXP,RRIGHT
+
+!     LOCAL VARIABLES:
+!       X        ARGUMENT OF F, G, SIN AND COS FUNCTIONS:
+!       X2       X SQUARED.
+!       FCOS     THE F FUNCTION TIMES THE COSINE.
+!       GSIN     THE G FUNCTION TIMES THE SINE.
+!       X100     ONE HUNDRED TIMES X.
+!       IX       INTERPOLATION LOWER INDEX.
+      REAL X,FCOS,GSIN,X100
+      DOUBLE PRECISION X2
+      INTEGER IX
+
+!     DATA:
+!       CMPSI    COMPSI FUNCTION FOR 0.50 < X < 1.00 IN 0.01 INCREMENTS.
+!       SIBYX    SINE INTEGRAL OVER X FOR X < 0.50 IN 0.01 INCREMENTS.
+      REAL CMPSI(50:100),SIBYX(0:50)
+      DATA CMPSI/.3430390,.3399895,.3369453,.3339064,.3308730,.3278452, &
+     &                    .3248230,.3218066,.3187960,.3157914,.3127928, &
+     &                    .3098003,.3068141,.3038343,.3008608,.2978939, &
+     &                    .2949336,.2919800,.2890331,.2860932,.2831602, &
+     &                    .2802343,.2773156,.2744041,.2715000,.2686033, &
+     &                    .2657141,.2628325,.2599586,.2570925,.2542343, &
+     &                    .2513840,.2485418,.2457077,.2428818,.2400642, &
+     &                    .2372550,.2344542,.2316621,.2288785,.2261037, &
+     &                    .2233376,.2205804,.2178323,.2150931,.2123631, &
+     &                    .2096422,.2069307,.2042284,.2015357,.1988524/
+      DATA SIBYX/1.000000,.9999944,.9999778,.9999500,.9999111,.9998611, &
+     &                    .9998000,.9997278,.9996445,.9995501,.9994446, &
+     &                    .9993280,.9992003,.9990616,.9989118,.9987508, &
+     &                    .9985789,.9983958,.9982017,.9979966,.9977804, &
+     &                    .9975532,.9973150,.9970658,.9968055,.9965343, &
+     &                    .9962521,.9959588,.9956548,.9953395,.9950135, &
+     &                    .9946765,.9943286,.9939697,.9936000,.9932194, &
+     &                    .9928279,.9924256,.9920124,.9915885,.9911537, &
+     &                    .9907081,.9902517,.9897845,.9893067,.9888181, &
+     &                    .9883188,.9878088,.9872881,.9867568,.9862148/
+
+!     DEFINE ARGUMENT:
+      X=PI*ARG
+
+!     BRANCH BASED ON MAGNITUDE OF X
+      IF(X.GE.1.)THEN
+
+!         RATIONAL APPROXIMATIONS:
+          X2=DBLE(X*X)
+          FCOS=REAL(FD+X2*(FC+X2*(FB+X2*(FA+X2))))*COS(X)               &
+     &      /(X*REAL(FH+X2*(FG+X2*(FF+X2*(FE+X2)))))
+          GSIN=REAL(GD+X2*(GC+X2*(GB+X2*(GA+X2))))*SIN(X)               &
+     &      /(X*REAL(GH+X2*(GG+X2*(GF+X2*(GE+X2)))))
+          COMPSI=(FCOS+GSIN)/PI
+      ELSEIF(X.GE..5)THEN
+
+!         INTERPOLATE INTO CMPSI TABLE:
+          X100=100*X
+          IX=INT(X100)
+          COMPSI=CMPSI(IX)+(X100-IX)*(CMPSI(IX+1)-CMPSI(IX))
+      ELSEIF(X.GE..0)THEN
+
+!         INTERPOLATE IN SIBYX TABLE [MULTIPLY BY ARG INSTEAD OF
+!         MULITPLYING BY X (=PI*ARG) AND THEN DIVIDING BY PI]:
+          X100=100*X
+          IX=INT(X100)
+          COMPSI=.5-ARG*(SIBYX(IX)+(X100-IX)*(SIBYX(IX+1)-SIBYX(IX)))
+      ELSE
+          STOP 'Error in COMPSI:  Negative argument.'
+      ENDIF
+      RETURN
+      END

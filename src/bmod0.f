@@ -1,0 +1,279 @@
+      SUBROUTINE BMOD0(IBINPT,VCEN,LFIRST,LBMCEN,LBMFLG)
+
+!     INITIALIZATIONS FOR ROUTINE BMOD:
+      IMPLICIT NONE
+
+!     PARAMETERS:
+      INCLUDE 'PARAMS.h'
+
+!     INPUT ARGUMENTS:
+!       IBINPT   BIN NUMBER OF CURRENT SPECTRAL POINT.
+!                (CENTER FREQUENCY = IBINPT * BNDWID + OSHIFT).
+!       VCEN     SPECTRAL BAND CENTRAL FREQUENCY [CM-1].
+!       LFIRST   FLAG, TRUE IF FIRST CALL TO BMOD0 AT CURRENT FREQUENCY.
+      INTEGER IBINPT
+      REAL VCEN
+      LOGICAL LFIRST
+
+!     INPUT/OUTPUT ARGUMENTS:
+!       LBMCEN   FLAG, TRUE IF S/d & 1/d DATA FOR CURRENT FREQUENCY BIN.
+!       LBMFLG   FLAG, TRUE IF CENTER OR TAIL DATA FOR CURRENT FREQ BIN.
+      LOGICAL LBMCEN,LBMFLG
+
+!     COMMONS:
+      INCLUDE 'BMHEAD.h'
+      INCLUDE 'BMDAT.h'
+      INCLUDE 'IFIL.h'
+      INCLUDE 'YPROP.h'
+
+!     /ACTIVE/
+!       NACT     NUMBER OF ACTIVE MOLECULES FOR CURRENT FREQUENCY BIN.
+!       NACTBM   NUMBER OF ACTIVE BAND MODEL MOLECULES FOR CURRENT FREQ.
+!       NACTX    NUMBER OF ACTIVE X & Y CROSS-SECTION MOLECULES.
+!       MACTBM   LIST OF ACTIVE BAND MODEL MOLECULES FOR CURRENT FREQ.
+!       MACTX    LIST OF ACTIVE X & Y CROSS-SECTION MOLECULES.
+      INTEGER NACT,NACTBM,NACTX,MACTBM,MACTX
+      COMMON/ACTIVE/NACT,NACTBM,NACTX,MACTBM(MMOLYT),MACTX(NMOLX)
+
+!     /BMDCMX/
+      INTEGER BINXTL,MOLXTL,ALFXTL
+      REAL SDX1TL,SDX2TL
+      COMMON/BMDCMX/BINXTL,MOLXTL,ALFXTL,SDX1TL(NTEMPX),SDX2TL(NTEMPX)
+
+!     /BMDATY/
+!       BINYCN   Y-MOLECULE LINE CENTER SPECTRAL BIN NUMBER.
+!       SDYCN    Y-MOLECULE ABSORPTION COEFFICIENTS [CM-1 / ATM].
+!       ALFYCN   Y-MOLECULE FOREIGN-BROADENED LORENTZ HALF WIDTH [CM-1].
+!       ODYCN    Y-MOLECULE RECIPROCAL LINE SPACING PARAMETER [CM].
+!       BINYTL   Y-MOLECULE LINE TAIL SPECTRAL BIN NUMBER.
+!       SDY0TL   Y-MOLECULE PADE NUMERATOR ZERO-ORDER TERM [CM-1 / ATM].
+!       SDY1TL   Y-MOLECULE PADE NUMERATOR 1ST-ORDER TERM [CM-1 / ATM].
+!       SDY2TL   Y-MOLECULE PADE NUMERATOR 2ND-ORDER TERM [CM-1 / ATM].
+!       SDY3TL   Y-MOLECULE PADE DENOMINATOR 1ST-ORDER TERM.
+!       SDY4TL   Y-MOLECULE PADE DENOMINATOR 2ND-ORDER TERM.
+      INTEGER BINYCN,ALFYCN,BINYTL
+      REAL SDYCN,ODYCN,SDY0TL,SDY1TL,SDY2TL,SDY3TL,SDY4TL
+      COMMON/BMDATY/BINYCN(MMOLY),SDYCN(MTEMP,MMOLY),ALFYCN(MMOLY),     &
+     &  ODYCN(MTEMP,MMOLY),BINYTL(MMOLY),SDY0TL(MTEMP,MPRES,MMOLY),     &
+     &         SDY1TL(MTEMP,MPRES,MMOLY),SDY2TL(MTEMP,MPRES,MMOLY),     &
+     &         SDY3TL(MTEMP,MPRES,MMOLY),SDY4TL(MTEMP,MPRES,MMOLY)
+
+!     /BMOD_0/
+!       COL_O3   2ND ORDER PATH LORENTZ WIDTH SUM FOR OZONE [CM2 ATM2].
+!       SDSUM    WEAK-LINE OPTICAL DEPTH SUM.
+!       ODSUM    WEAK-LINE OPTICAL DEPTH WEIGHTED LINE-SPACING SUM [CM].
+!       DOPSUM   PATH DOPPLER WIDTH SUM [CM].
+!       COLSUM   PATH COLLISION (LORENTZ) WIDTH SUM [CM ATM].
+      REAL COL_O3,SDSUM,ODSUM,DOPSUM,COLSUM,TAILSM
+      COMMON/BMOD_0/COL_O3,SDSUM(MMOLT),ODSUM(MMOLT),DOPSUM(MMOLT),     &
+     &  COLSUM(MMOLT),TAILSM(MMOLT,0:NTLSUB)
+      SAVE /BMOD_0/
+
+!     LOCAL VARIABLES:
+!       IMOL     MOLECULAR INDEX.
+!       IALFS    SELF-BROADENED HALF WIDTH TIME 10000 [CM-1].
+!       ITEMP    TEMPERATURE INDEX.
+!       IPRESS   PRESSURE INDEX.
+!       IACT     LOOP INDEX FOR ACTIVE MOLECULES.
+!       IMOLY    Y MOLECULE INDEX.
+!       ITLSUB   LOOP INDEX FOR LINE TAIL SUB-INTERVALS.
+!       IOS      I/O STATUS FLAG.
+!       MTEST    LOGICAL FLAG, TRUE IF LINE CENTER DATA WAS READ IN.
+      INTEGER IMOL,IALFS,ITEMP,IPRESS,IACT,IMOLY,ITLSUB,IOS
+      LOGICAL MTEST
+
+!     DATA:
+!       DOPFAC   SQRT(2 LN2 R T / M)/C WITH T=273.15K & M=MolWt.
+      REAL DOPFAC(NMOLXT)
+      SAVE DOPFAC
+      DATA DOPFAC/                                                      &
+     &  1.3945E-6,  0.8922E-6,  0.8543E-6,  0.8921E-6,  1.1183E-6,      &
+     &  1.4777E-6,  1.0463E-6,  1.0805E-6,  0.7395E-6,  0.8726E-6,      &
+     &  1.4342E-6,  0.7456E-6,  5.04981E-7, 5.38245E-7, 5.79088E-7,     &
+     &  6.30907E-7, 6.36486E-7, 4.32375E-7, 4.52709E-7, 4.76212E-7,     &
+     &  5.99528E-7, 6.65841E-7, 5.83391E-7, 4.7721E-7,  5.69488E-7,     &
+     &  4.16862E-6, 2.95838E-6/
+
+!     DOES IBINPT EXCEED BAND MODEL DATA RANGE?
+      IF(IBINPT.GT.MBINBM)THEN
+
+!         SET NUMBER OF ACTIVE MOLECULES TO ZERO AND RETURN:
+          NACTBM=0
+          NACTX=0
+          LBMCEN=.FALSE.
+          LBMFLG=.FALSE.
+          RETURN
+      ENDIF
+
+!     FIRST CALL AT THIS FREQUENCY?
+      IF(LFIRST)THEN
+
+!         INITIALIZE NUMBER OF ACTIVE MOLECULES FOR FREQUENCY BIN:
+          NACTBM=0
+          NACTX=0
+
+!         IS THERE MOLECULAR LINE CENTER DATA FOR FREQUENCY BIN?
+          LBMCEN=IBINCN.EQ.IBINPT
+          IF(LBMCEN)THEN
+   10         CONTINUE
+
+!             INCREMENT NUMBER OF ACTIVE BAND MODEL MOLECULES AND
+!             MAKE MACTBM NEGATIVE TO INDICATE LINE CENTER DATA:
+              NACTBM=NACTBM+1
+              MACTBM(NACTBM)=-IMOLCN
+
+!             STORE AND READ LINE CENTER DATA FOR FREQUENCY BIN:
+              CALL BMLOAD(1)
+              IF(IPCN.LT.LRECCN)THEN
+                  IPCN=IPCN+1
+                  READ(ITBCN,REC=IPCN)                                  &
+     &              IBINCN,IMOLCN,(SDZCN(ITEMP),ITEMP=1,NTEMP),         &
+     &              IALFCN,IALFS,(ODZCN(ITEMP),ITEMP=1,NTEMP)
+                  IF(IBINCN.EQ.IBINPT)GOTO 10
+              ENDIF
+          ENDIF
+
+!         IS THERE MOLECULAR LINE TAIL DATA FOR FREQUENCY BIN?
+          IF(IBINTL.EQ.IBINPT)THEN
+   20         CONTINUE
+
+!             IF CURRENT MOLECULE IS NOT ACTIVE, ADD TO LIST:
+              DO IACT=1,NACTBM
+                  IF(-MACTBM(IACT).EQ.IMOLTL)GOTO 30
+              ENDDO
+              NACTBM=NACTBM+1
+              MACTBM(NACTBM)=IMOLTL
+
+!             STORE & READ LINE TAIL DATA FOR FREQUENCY BIN IBINPT:
+   30         CONTINUE
+              CALL BMLOAD(2)
+              IF(IPTL.LT.LRECTL)THEN
+                  IPTL=IPTL+1
+                  READ(ITBTL,REC=IPTL)IBINTL,IMOLTL,                    &
+     &              ((SDZ0TL(ITEMP,IPRESS),                             &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS),           &
+     &              ((SDZ1TL(ITEMP,IPRESS),                             &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS),           &
+     &              ((SDZ2TL(ITEMP,IPRESS),                             &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS),           &
+     &              ((SDZ3TL(ITEMP,IPRESS),                             &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS),           &
+     &              ((SDZ4TL(ITEMP,IPRESS),                             &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS)
+                  IF(IBINTL.EQ.IBINPT)GOTO 20
+              ENDIF
+          ENDIF
+
+!         LOAD CFC DATA FOR "IBINPT" FREQUENCY BIN:
+          IF(BINXTL.EQ.IBINPT)THEN
+   40         CONTINUE
+
+!             INCREMENT NUMBER OF ACTIVE MOLECULES:
+              NACTX=NACTX+1
+              MACTX(NACTX)=MOLXTL
+              IF(ALFXTL.GT.0)THEN
+                  NACTX=NACTX+1
+                  MACTX(NACTX)=ALFXTL
+              ENDIF
+
+!             STORE & READ CROSS-SECTION DATA FOR FREQUENCY BIN:
+              CALL BMXLD
+              READ(ITBX,*,IOSTAT=IOS)                                   &
+     &          BINXTL,MOLXTL,(SDX1TL(ITEMP),ITEMP=1,NTEMPX)
+              IF(IOS.EQ.0)THEN
+                  READ(ITBX,*)ALFXTL,(SDX2TL(ITEMP),ITEMP=1,NTEMPX)
+                  IF(BINXTL.EQ.IBINPT)GOTO 40
+              ENDIF
+          ENDIF
+
+!         LOOP OVER Y-MOLECULES WITH BAND MODEL PARAMETERS:
+          DO IMOLY=1,NMOLYS
+
+!             LINE CENTER DATA:
+              MTEST=BINYCN(IMOLY).EQ.IBINPT
+              IF(MTEST)THEN
+                  LBMCEN=.TRUE.
+
+!                 INCREMENT NUMBER OF ACTIVE MOLECULES AND MAKE
+!                 MACTBM NEGATIVE TO INDICATE LINE CENTER DATA:
+                  NACTBM=NACTBM+1
+                  MACTBM(NACTBM)=-NMOLXT-IMOLY
+
+!                 STORE AND READ Y LINE CENTER DATA FOR FREQUENCY BIN:
+                  CALL BMYLD(1,IMOLY)
+                  READ(ITBY(IMOLY,2),*,IOSTAT=IOS)BINYCN(IMOLY),ITEMP,  &
+     &              (SDYCN(ITEMP,IMOLY),ITEMP=1,NTEMP),ALFYCN(IMOLY),   &
+     &              IALFS,(ODYCN(ITEMP,IMOLY),ITEMP=1,NTEMP)
+              ENDIF
+
+!             LINE TAIL DATA:
+              IF(BINYTL(IMOLY).EQ.IBINPT)THEN
+
+!                 INCREMENT ACTIVE MOLECULES NUMBER IF NOT ON LIST:
+                  IF(.NOT.MTEST)THEN
+                      NACTBM=NACTBM+1
+                      MACTBM(NACTBM)=NMOLXT+IMOLY
+                  ENDIF
+
+!                 STORE & READ Y TAIL DATA FOR FREQUENCY BIN IBINPT:
+                  CALL BMYLD(2,IMOLY)
+                  READ(ITBY(IMOLY,1),*,IOSTAT=IOS)BINYTL(IMOLY),ITEMP,  &
+     &              ((SDY0TL(ITEMP,IPRESS,IMOLY),                       &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS),           &
+     &              ((SDY1TL(ITEMP,IPRESS,IMOLY),                       &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS),           &
+     &              ((SDY2TL(ITEMP,IPRESS,IMOLY),                       &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS),           &
+     &              ((SDY3TL(ITEMP,IPRESS,IMOLY),                       &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS),           &
+     &              ((SDY4TL(ITEMP,IPRESS,IMOLY),                       &
+     &                       ITEMP=1,NTEMP),IPRESS=1,NPRESS)
+              ENDIF
+          ENDDO
+
+!         LOAD Y-MOLECULE CROSS-SECTIONS FOR FREQUENCY BIN IBINPT:
+          DO IMOLY=NMOLYS+1,NMOLY
+              IF(BINYTL(IMOLY).EQ.IBINPT)THEN
+
+!                 INCREMENT NUMBER OF ACTIVE MOLECULES:
+                  NACTX=NACTX+1
+                  MACTX(NACTX)=NMOLXT+IMOLY
+
+!                 STORE & READ Y CROSS-SECTION FOR FREQUENCY BIN:
+                  CALL BMYLD(3,IMOLY)
+                  READ(ITBY(IMOLY,1),*,IOSTAT=IOS)                      &
+     &              BINYTL(IMOLY),(SDY1TL(ITEMP,1,IMOLY),ITEMP=1,NTEMPX)
+              ENDIF
+          ENDDO
+          NACT=NACTBM+NACTX
+          LBMFLG=NACTBM.GT.0
+      ENDIF
+
+!     ZERO LAYER LOOP QUANTITIES; DEFINE STANDARD DOPPLER WIDTH:
+      COL_O3=0.
+      DO IACT=1,NACTBM
+          IMOL=-MACTBM(IACT)
+          IF(IMOL.GT.0)THEN
+              IF(IMOL.LE.NMOLXT)THEN
+                  DOP0(IMOL)=VCEN*DOPFAC(IMOL)
+              ELSE
+                  DOP0(IMOL)=VCEN*DOPY(IMOL-NMOLXT)
+              ENDIF
+              SDSUM(IMOL)=0.
+              ODSUM(IMOL)=0.
+              COLSUM(IMOL)=0.
+              DOPSUM(IMOL)=0.
+          ELSE
+              IMOL=-IMOL
+          ENDIF
+          DO ITLSUB=0,NTLSUB
+              TAILSM(IMOL,ITLSUB)=0.
+          ENDDO
+      ENDDO
+      DO IACT=1,NACTX
+          TAILSM(MACTX(IACT),0)=0.
+      ENDDO
+
+!     RETURN TO LOOP:
+      RETURN
+      END

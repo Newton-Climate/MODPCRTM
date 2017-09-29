@@ -1,0 +1,52 @@
+============================03/14/2013========================
+               README for PCRTM modified MODTRAN5V3 
+
+This version is for band model only, correlated-k not included
+==============================================================
+
+
+All the files needed to run modtran_pcrtm is located under "modpcrtm" directory.
+It contains the following directories:
+
+  DATA
+  src
+  obj-ifort
+  support
+
+Under modpcrm directory, it contains the following files:
+
+  mod5root.in
+  Makefile
+  README
+
+
+Under support directory, it contains the following files:
+  pcrtm.in
+  OSSEIndex_109.asc
+  ParamUpOSSE.asc
+  r101.tp5
+  modchan.asc
+  modmono.asc
+  pcchan.asc
+  pcmono.asc
+
+Steps to run the code:
+
+1). cd to "modpcrtm" directory
+
+2). type "make clean"
+
+3). type "make"
+
+4). type "cp support/pcrtm.in pcrtm.in" and "cp support/r101.tp5 output.tp5" 
+
+5). type "./Mod5300alpha-ifort.exe" to run the code
+
+steps 1), 2),and 3) are only needed the first you run the code. 
+
+After you finish running the "./Mod5300alpha-ifort.exe" code, please compare "radiance.out" file with
+'support/pcchan.asc', and compare 'output.plt' file with 'support/pcmono.asc'. They should be the same. 
+The 15 cm-1 resolution output of original modtran5v3 are saved as 'support/modmono.asc', and the 5 nm 
+resolution output of modtran5v3 are saved as 'support/modchan.asc' for your reference.
+
+

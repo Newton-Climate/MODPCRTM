@@ -1,0 +1,100 @@
+      SUBROUTINE TERPSO(CWT,DELM0,FBEAM,GL,MAZIM,MXCMU,PLANK,NUMU,NSTR, &
+     &     OPRIM,PI,YLM0,YLMC,YLMU,PSI,XR0,XR1,Z0,ZJ,                   &
+     &     ZBEAM,Z0U,Z1U,Z0UMS,Z1UMS,BEAMMS)
+
+      REAL DELM0,FACT,FBEAM,OPRIM,PI,PSUM,SUM0,XR0,XR1
+      INTEGER IQ,IU,JQ,MAZIM,MXCMU,NSTR,NUMU
+!       LOWER CASE VARIABLES ADDED
+
+!         INTERPOLATES SOURCE FUNCTIONS TO USER ANGLES
+
+!    I N P U T      V A R I A B L E S:
+
+!       CWT    :  WEIGHTS FOR GAUSS QUADRATURE OVER ANGLE COSINE
+!       DELM0  :  KRONECKER DELTA, DELTA-SUB-M0
+!       GL     :  DELTA-M SCALED LEGENDRE COEFFICIENTS OF PHASE FUNCTION
+!                    (INCLUDING FACTORS 2L+1 AND SINGLE-SCATTER ALBEDO)
+!       MAZIM  :  ORDER OF AZIMUTHAL COMPONENT
+!       OPRIM  :  SINGLE SCATTERING ALBEDO
+!       XR0    :  EXPANSION OF THERMAL SOURCE FUNCTION
+!       XR1    :  EXPANSION OF THERMAL SOURCE FUNCTION EQS.SS(14-16)
+!       YLM0   :  NORMALIZED ASSOCIATED LEGENDRE POLYNOMIAL
+!                 AT THE BEAM ANGLE
+!       YLMC   :  NORMALIZED ASSOCIATED LEGENDRE POLYNOMIAL
+!                 AT THE QUADRATURE ANGLES
+!       YLMU   :  NORMALIZED ASSOCIATED LEGENDRE POLYNOMIAL
+!                 AT THE USER ANGLES
+!       Z0     :  SOLUTION VECTORS Z-SUB-ZERO OF EQ. SS(16)
+!       ZJ     :  SOLUTION VECTOR CAPITAL -Z-SUB-ZERO AFTER SOLVING
+!                 EQ. SS(19)
+!       (REMAINDER ARE 'DISORT' INPUT VARIABLES)
+
+!    O U T P U T     V A R I A B L E S:
+
+!       ZBEAM  :  INCIDENT-BEAM SOURCE FUNCTION AT USER ANGLES
+!       Z0U,Z1U:  COMPONENTS OF A LINEAR-IN-OPTICAL-DEPTH-DEPENDENT
+!                    SOURCE (APPROXIMATING THE PLANCK EMISSION SOURCE)
+
+!   I N T E R N A L       V A R I A B L E S:
+
+!       PSI    :  SUM JUST AFTER SQUARE BRACKET IN  EQ. SD(9)
+!+---------------------------------------------------------------------+
+      LOGICAL PLANK
+      REAL CWT(*),GL(0:*),PSI(*),YLM0(0:*),YLMC(0:MXCMU,*),             &
+     &  YLMU(0:MXCMU,*),Z0(*),ZJ(*),ZBEAM(*),Z0U(*),Z1U(*),             &
+     &  BEAMMS(*),Z1UMS(*),Z0UMS(*),SUM1
+!              LOWER CASE VARIABLES ADDED
+
+      IF(FBEAM.GT.0.0)THEN
+!                                  ** BEAM SOURCE TERMS; EQ. SD(9)
+         DO 20 IQ = MAZIM,NSTR-1
+            PSUM = 0.
+            DO 10 JQ = 1,NSTR
+               PSUM = PSUM+CWT(JQ)*YLMC(IQ,JQ)*ZJ(JQ)
+ 10         CONTINUE
+            PSI(IQ+1) = GL(IQ)*PSUM/2
+ 20      CONTINUE
+
+         FACT = (2.-DELM0)*FBEAM/(4*PI)
+         DO 40 IU = 1,NUMU
+            SUM0 = 0.
+!             LOWER CASE VARIABLES ADDED
+            SUM1 = 0.
+            DO 30 IQ = MAZIM,NSTR-1
+               SUM0 = SUM0+YLMU(IQ,IU)*(PSI(IQ+1)+FACT*GL(IQ)*YLM0(IQ))
+!              LOWER CASE VARIABLES ADDED
+               SUM1 = SUM1+YLMU(IQ,IU)*PSI(IQ+1)
+ 30         CONTINUE
+            ZBEAM(IU) = SUM0
+!             LOWER CASE VARIABLES ADDED
+            BEAMMS(IU) = SUM1
+ 40      CONTINUE
+      ENDIF
+
+      IF(PLANK.AND.MAZIM.EQ.0)THEN
+
+!                                ** THERMAL SOURCE TERMS, STWJ(27C)
+         DO 80 IQ = MAZIM,NSTR-1
+            PSUM = 0.0
+            DO 70 JQ = 1,NSTR
+               PSUM = PSUM+CWT(JQ)*YLMC(IQ,JQ)*Z0(JQ)
+ 70         CONTINUE
+            PSI(IQ+1) = GL(IQ)*PSUM/2
+ 80      CONTINUE
+
+         DO 100 IU = 1,NUMU
+            SUM0 = 0.0
+            DO 90 IQ = MAZIM,NSTR-1
+               SUM0 = SUM0+YLMU(IQ,IU)*PSI(IQ+1)
+ 90         CONTINUE
+!             LOWER CASE VARIABLES ADDED
+            Z0UMS(IU) = SUM0
+            Z1UMS(IU) = OPRIM*XR1
+            Z0U(IU) = SUM0+(1.-OPRIM)*XR0
+            Z1U(IU) = XR1
+ 100     CONTINUE
+
+      ENDIF
+
+      RETURN
+      END

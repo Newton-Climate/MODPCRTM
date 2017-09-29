@@ -1,0 +1,69 @@
+      SUBROUTINE CHECKP(P,JUNITP)
+
+!     CHECKP CHECKS THE PRESSURE UNIT SPECIFIER.
+      IMPLICIT NONE
+
+!     PARAMETERS:
+      INCLUDE 'PARAMS.h'
+
+!     INPUT ARGUMENTS:
+!       P        PRESSURE.
+!       JUNITP   UNIT FLAG FOR P.
+
+!     OUTPUT ARGUMENTS:
+!       P        PRESSURE [MBARS].
+      REAL P
+      INTEGER JUNITP
+      IF(JUNITP.EQ.11)THEN
+
+!         CONVERT FROM ATM TO MBARS:
+          P=PZERO*P
+      ELSEIF(JUNITP.EQ.12)THEN
+
+!         CONVERT FROM TORR TO MBARS:
+          P=PZERO*P/P0TORR
+      ELSEIF(JUNITP.GT.12)THEN
+          IF(LJMASS)CALL WRTBUF(FATAL)
+          STOP 'CHECKP:  Cannot interpret unit specifier for pressure.'
+      ENDIF
+      RETURN
+      END
+
+      SUBROUTINE CHECKT(T,JUNITT,M1)
+
+!     CHECKT CHECKS THE TEMPERATURE UNIT SPECIFIER.
+      IMPLICIT NONE
+
+!     PARAMETERS:
+      INCLUDE 'PARAMS.h'
+
+!     INPUT ARGUMENTS:
+!       T        TEMPERATURE [K or C].
+!       JUNITT   UNIT FLAG FOR TEMPERATURE.
+!       M1       DEFAULT PROFILE INDEX FOR TEMPERATURE.
+
+!     OUTPUT ARGUMENTS:
+!       T        TEMPERATURE [K].
+      REAL T
+      INTEGER JUNITT,M1
+
+!     BRANCH BASED ON JUNIT VALUE:
+      IF(JUNITT.EQ.11)THEN
+
+!         CONVERT FROM C TO T:
+          T=T+TZERO
+      ELSEIF(JUNITT.GE.1 .AND. JUNITT.LE.6)THEN
+
+!         INITIALIZE T TO 0K FOR MODEL ATMOSPHERE SELECTION:
+          T=0.
+      ELSEIF(JUNITT.EQ.12 .AND. M1.GE.1 .AND. M1.LE.6)THEN
+
+!         RESET JUNITT TO M1 FOR DELTA T OPTION:
+          JUNITT=M1
+      ELSEIF(JUNITT.NE.10)THEN
+          IF(LJMASS)CALL WRTBUF(FATAL)
+          STOP                                                          &
+     &      'CHECKT:  Cannot interpret unit specifier for temperature.'
+      ENDIF
+      RETURN
+      END
